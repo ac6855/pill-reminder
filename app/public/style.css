@@ -155,6 +155,7 @@ html, body {
 .card .hint { font-size: 12px; color: var(--muted); margin: -4px 0 14px; line-height: 1.7; }
 
 table.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.grid.grid-wide { min-width: 900px; }
 table.grid th {
   text-align: left; font-weight: 500; color: var(--muted);
   font-size: 12px; padding: 8px 6px; border-bottom: 1px solid var(--border);
@@ -164,15 +165,15 @@ table.grid td { padding: 6px; border-bottom: 1px solid #f2f4f0; vertical-align: 
 table.grid tr.off td { opacity: .48; }
 .table-scroll { overflow-x: auto; }
 
-input[type="text"], input[type="time"], input[type="password"], select, textarea {
+input[type="text"], input[type="time"], input[type="password"], input[type="number"], select, textarea {
   width: 100%; font: inherit; font-size: 13px; color: var(--text);
   background: #fcfcfa; border: 1px solid var(--border); border-radius: 8px;
   padding: 7px 9px; outline: none; transition: border-color .15s ease;
 }
 input:focus, select:focus, textarea:focus { border-color: var(--accent); background: #fff; }
 input[type="time"] { min-width: 96px; }
-.w-time { width: 96px; }
-.w-narrow { width: 88px; }
+input.w-time { width: 96px; }
+input.w-narrow { width: 88px; }
 
 .btn {
   font: inherit; font-size: 13px; cursor: pointer;
@@ -215,6 +216,26 @@ input[type="time"] { min-width: 96px; }
 }
 .badge.ok { background: var(--accent-soft); color: #085041; }
 .badge.err { background: var(--warn-soft); color: var(--warn); }
+.badge.warn-b { background: #fdf1dc; color: #8a5a05; }
+
+/* ---------- 推送通道引导 ---------- */
+
+.guide { display: flex; flex-direction: column; gap: 10px; }
+.guide-item {
+  background: #fbfcfa; border: 1px solid var(--border);
+  border-radius: 10px; padding: 12px 14px;
+}
+.guide-h {
+  font-size: 13px; font-weight: 600; margin-bottom: 6px;
+  display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+}
+.guide-ol { margin: 0; padding-left: 18px; font-size: 12.5px; color: var(--muted); line-height: 1.85; }
+.guide-ol li { margin-bottom: 2px; }
+.guide-ol code, .hint code {
+  background: #eef0ec; border-radius: 4px; padding: 1px 5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11.5px;
+}
+.field-note { font-size: 11.5px; color: var(--faint); margin-top: 5px; line-height: 1.6; }
 
 .modal-mask {
   position: fixed; inset: 0; background: rgba(20,24,21,.36);
@@ -248,3 +269,133 @@ input[type="time"] { min-width: 96px; }
 }
 .file-pick:hover { border-color: var(--accent); background: var(--accent-soft); }
 .file-pick input { display: none; }
+
+/* ---------- 日 / 周 / 月 切换 ---------- */
+
+.seg {
+  display: flex; gap: 2px; background: #eceee9; border-radius: 10px;
+  padding: 3px; margin-bottom: 16px; width: fit-content;
+}
+.seg button {
+  font: inherit; font-size: 13px; cursor: pointer;
+  border: none; background: transparent; color: var(--muted);
+  padding: 5px 18px; border-radius: 8px; line-height: 1.5;
+}
+.seg button.active {
+  background: var(--surface); color: var(--accent);
+  font-weight: 500; box-shadow: 0 1px 2px rgba(20, 24, 21, .08);
+}
+
+.rest-hint {
+  margin-top: 14px; font-size: 12px; color: var(--faint); text-align: center;
+}
+.rest-hint:empty { display: none; }
+
+.tap-hint { font-size: 12px; color: var(--faint); text-align: center; margin: 16px 0 0; }
+
+/* ---------- 周记录 ---------- */
+
+.stat-row {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px;
+}
+.stat {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 12px 8px; text-align: center;
+}
+.stat b { display: block; font-size: 20px; font-weight: 600; color: var(--accent); font-variant-numeric: tabular-nums; }
+.stat b i { font-style: normal; font-size: 12px; color: var(--faint); font-weight: 400; }
+.stat span { font-size: 11px; color: var(--muted); }
+
+.day-cards { display: flex; flex-direction: column; gap: 8px; }
+.dc {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 10px 14px; cursor: pointer;
+}
+.dc:active { background: #fbfcfa; }
+.dc.today { border-color: var(--accent); }
+.dc.future { opacity: .45; }
+.dc.skip { opacity: .55; }
+.dc-left { display: flex; flex-direction: column; min-width: 48px; line-height: 1.35; }
+.dc-left b { font-size: 13px; font-weight: 500; }
+.dc-left span { font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.dc-mid { flex: 1; display: flex; align-items: center; gap: 10px; min-width: 0; }
+.dc-mid .bar { flex: 1; }
+.dc.full .dc-mid .bar > i { background: var(--accent); }
+.dc-num {
+  font-size: 12px; color: var(--muted); min-width: 44px;
+  text-align: right; font-variant-numeric: tabular-nums;
+}
+
+.card-h { font-size: 13px; font-weight: 600; margin: 0 0 10px; }
+.pp-list { display: flex; flex-direction: column; gap: 9px; }
+.pp { display: flex; align-items: center; gap: 9px; font-size: 12.5px; }
+.pp-time {
+  color: var(--accent); font-weight: 600; min-width: 40px;
+  font-variant-numeric: tabular-nums;
+}
+.pp-name {
+  flex: 1; min-width: 0; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pp-bar { flex: 0 0 68px; height: 5px; background: #eef0ec; border-radius: 999px; overflow: hidden; }
+.pp-bar > i { display: block; height: 100%; background: #6aab97; border-radius: 999px; }
+.pp-bar > i.full { background: var(--accent); }
+.pp-num { min-width: 40px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* ---------- 月记录 ---------- */
+
+.cal {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 14px 12px; margin-bottom: 14px;
+}
+.cal-title { font-size: 13px; font-weight: 600; margin: 0 2px 10px; }
+.cal-head, .cal-grid {
+  display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px;
+}
+.cal-head { margin-bottom: 6px; }
+.cal-head span { font-size: 11px; color: var(--faint); text-align: center; }
+.cal-cell {
+  position: relative; aspect-ratio: 1 / 1; border-radius: 8px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  font-size: 12px; font-variant-numeric: tabular-nums;
+  border: 1px solid transparent; cursor: pointer;
+}
+.cal-cell b { font-weight: 500; line-height: 1.2; }
+.cal-cell.blank { visibility: hidden; }
+.cal-cell.full { background: var(--accent); border-color: var(--accent); color: #fff; }
+.cal-cell.part { background: var(--accent-soft); border-color: #cbe9dd; color: #085041; }
+.cal-cell.none { background: var(--warn-soft); border-color: #f3d6d6; color: var(--warn); }
+.cal-cell.skip { background: #f4f5f2; color: var(--faint); }
+.cal-cell.future { background: transparent; color: #c6cbc5; border-style: dashed; border-color: #e8eae6; }
+.cal-cell.today { border-color: var(--accent); border-width: 2px; }
+.cal-cell.future.today { border-style: solid; }
+.cal-dot {
+  width: 56%; height: 3px; margin-top: 4px; border-radius: 999px;
+  background: linear-gradient(to right, var(--accent) var(--p), #c8e5da var(--p));
+}
+.cal-legend {
+  display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px;
+  padding-top: 10px; border-top: 1px solid #f2f4f0;
+  font-size: 11px; color: var(--muted);
+}
+.cal-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.lg { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.lg.full { background: var(--accent); }
+.lg.part { background: var(--accent-soft); border: 1px solid #cbe9dd; }
+.lg.none { background: var(--warn-soft); border: 1px solid #f3d6d6; }
+.lg.skip { background: #f4f5f2; border: 1px solid #e8eae6; }
+
+/* ---------- 管理页：星期选择 ---------- */
+
+.wd-picker { display: flex; gap: 2px; }
+.wd-picker button {
+  font: inherit; font-size: 11px; line-height: 1; cursor: pointer;
+  width: 20px; height: 20px; padding: 0; border-radius: 5px;
+  border: 1px solid var(--border); background: #fcfcfa; color: var(--faint);
+}
+.wd-picker button.on {
+  background: var(--accent-soft); border-color: #b9dfd1; color: #085041; font-weight: 600;
+}
+.wd-picker button:hover { border-color: #c9cfc8; }
+.wd-sum { font-size: 11px; color: var(--faint); margin-left: 6px; }

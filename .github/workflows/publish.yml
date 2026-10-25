@@ -32,7 +32,7 @@ jobs:
         uses: actions/checkout@v4
 
       # 先做语法自检再构建镜像：不过就别推新镜像，
-      # 免得把坏版本推到 NAS 上（compose 设的是 pull_policy: always）
+      # 免得把坏版本推到 NAS 上（compose 设的是 pull_policy: missing）
       - name: Set up Node
         uses: actions/setup-node@v4
         with:

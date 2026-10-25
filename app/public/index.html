@@ -15,21 +15,35 @@
       <span class="brand-sub" id="dateSub">今日打卡</span>
     </div>
     <div class="date-nav">
-      <button id="prevDay" aria-label="前一天">‹</button>
-      <div class="cur" id="dateCur">—</div>
-      <button id="nextDay" aria-label="后一天">›</button>
+      <button id="prevBtn" aria-label="上一页">‹</button>
+      <div class="cur" id="curLabel">—</div>
+      <button id="nextBtn" aria-label="下一页">›</button>
     </div>
   </div>
 
-  <div class="progress-card">
-    <div class="progress-line">
-      <div class="num"><span id="doneCount">0</span><small> / <span id="totalCount">0</span> 项已完成</small></div>
-      <div class="desc" id="progressDesc"></div>
-    </div>
-    <div class="bar"><i id="progressBar"></i></div>
+  <div class="seg" id="viewSeg">
+    <button class="active" data-view="day">日</button>
+    <button data-view="week">周</button>
+    <button data-view="month">月</button>
   </div>
 
-  <div class="list" id="list"></div>
+  <div id="viewDay">
+    <div class="progress-card">
+      <div class="progress-line">
+        <div class="num"><span id="doneCount">0</span><small> / <span id="totalCount">0</span> 项已完成</small></div>
+        <div class="desc" id="progressDesc"></div>
+      </div>
+      <div class="bar"><i id="progressBar"></i></div>
+    </div>
+
+    <div class="list" id="list"></div>
+    <div class="rest-hint" id="restHint"></div>
+  </div>
+
+  <div id="viewRange" hidden>
+    <div id="rangeBody"></div>
+    <p class="tap-hint">点任意一天查看当天明细</p>
+  </div>
 
   <div class="footer">
     数据仅保存在本机 SQLite · <a href="/admin.html">进入配置</a>
@@ -37,9 +51,12 @@
 </div>
 
 <script>
-const state = { date: null, items: [], isToday: true, now: '' };
+const WEEK_CN = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+const state = { view: 'day', anchor: fmtDate(new Date()), restCount: 0 };
 
 const el = (id) => document.getElementById(id);
+
+/* ---------- 日期工具 ---------- */
 
 function fmtDate(d) {
   const y = d.getFullYear();
@@ -55,33 +72,92 @@ function shiftDate(str, delta) {
   return fmtDate(dt);
 }
 
+/** 1=周一 … 7=周日 */
+function isoDowOf(str) {
+  const [y, m, d] = str.split('-').map(Number);
+  return ((new Date(y, m - 1, d).getDay() + 6) % 7) + 1;
+}
+
+function weekStartOf(str) {
+  return shiftDate(str, -(isoDowOf(str) - 1));
+}
+
+function monthStartOf(str) {
+  return str.slice(0, 7) + '-01';
+}
+
+function monthEndOf(str) {
+  const [y, m] = str.split('-').map(Number);
+  const dt = new Date(y, m, 0);
+  return fmtDate(dt);
+}
+
+function shiftMonth(str, delta) {
+  const [y, m] = str.split('-').map(Number);
+  const dt = new Date(y, m - 1 + delta, 1);
+  return fmtDate(dt);
+}
+
 function toMinutes(hm) {
   const [h, m] = hm.split(':').map(Number);
   return h * 60 + m;
 }
 
-function renderDateLabel() {
-  const today = fmtDate(new Date());
-  el('dateCur').textContent = state.date === today ? '今天' : state.date.slice(5).replace('-', '/');
-  el('dateSub').textContent = state.isToday ? '今日打卡' : '历史记录';
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
-function render() {
+function pct(done, total) {
+  return total ? Math.round((done / total) * 100) : 0;
+}
+
+/* ---------- 顶部标签 ---------- */
+
+function renderLabels() {
+  const today = fmtDate(new Date());
+  let cur = '';
+  let sub = '';
+
+  if (state.view === 'day') {
+    cur = state.anchor === today ? '今天' : state.anchor.slice(5).replace('-', '/');
+    sub = state.anchor === today ? '今日打卡' : state.anchor > today ? '未来计划' : '历史记录';
+  } else if (state.view === 'week') {
+    const from = weekStartOf(state.anchor);
+    const to = shiftDate(from, 6);
+    cur = `${from.slice(5).replace('-', '/')}–${to.slice(5).replace('-', '/')}`;
+    sub = from === weekStartOf(today) ? '本周记录' : '周记录';
+  } else {
+    const [y, m] = state.anchor.split('-').map(Number);
+    cur = `${y} 年 ${m} 月`;
+    sub = monthStartOf(state.anchor) === monthStartOf(today) ? '本月记录' : '月记录';
+  }
+
+  el('curLabel').textContent = cur;
+  el('dateSub').textContent = sub;
+}
+
+/* ---------- 日视图 ---------- */
+
+function renderDay() {
   const list = el('list');
   list.innerHTML = '';
+  const items = state.items || [];
 
-  if (!state.items.length) {
-    list.innerHTML = '<div class="empty">还没有配置用药计划<br><a href="/admin.html">去配置页添加</a></div>';
+  if (!items.length) {
+    list.innerHTML = state.restCount
+      ? `<div class="empty">今天没有需要执行的计划<br>另有 ${state.restCount} 项按星期设置今天不需要执行</div>`
+      : '<div class="empty">当天没有需要执行的计划<br><a href="/admin.html">去配置页添加</a></div>';
     el('doneCount').textContent = '0';
     el('totalCount').textContent = '0';
     el('progressBar').style.width = '0%';
     el('progressDesc').textContent = '';
+    el('restHint').textContent = '';
     return;
   }
 
   const nowMin = toMinutes(state.now || '00:00');
 
-  for (const it of state.items) {
+  for (const it of items) {
     const late = it.enabled && state.isToday && !it.done && nowMin > toMinutes(it.time);
     const div = document.createElement('div');
     div.className = 'item' + (it.done ? ' done' : '') + (late ? ' late' : '') + (it.enabled ? '' : ' disabled');
@@ -114,32 +190,31 @@ function render() {
     list.appendChild(div);
   }
 
-  const active = state.items.filter((i) => i.enabled);
+  const active = items.filter((i) => i.enabled);
   const done = active.filter((i) => i.done).length;
   el('doneCount').textContent = String(done);
   el('totalCount').textContent = String(active.length);
-  const pct = active.length ? Math.round((done / active.length) * 100) : 0;
-  el('progressBar').style.width = pct + '%';
+  el('progressBar').style.width = pct(done, active.length) + '%';
   el('progressDesc').textContent = active.length === 0
     ? ''
     : done === active.length
       ? '今天全部完成'
       : `还剩 ${active.length - done} 项`;
-}
 
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  el('restHint').textContent = state.restCount
+    ? `另有 ${state.restCount} 项按星期设置今天不需要执行`
+    : '';
 }
 
 async function toggle(item) {
   const target = !item.done;
   item.done = target;
-  render();
+  renderDay();
   try {
     const res = await fetch('/api/checkin', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ planId: item.id, date: state.date, done: target })
+      body: JSON.stringify({ planId: item.id, date: state.anchor, done: target })
     });
     if (!res.ok) throw new Error('保存失败');
     const data = await res.json();
@@ -149,44 +224,208 @@ async function toggle(item) {
     item.done = !target;
     alert('打卡状态保存失败，请检查网络后重试');
   }
-  render();
+  renderDay();
 }
 
-async function load(date) {
+async function loadDay(date) {
   const res = await fetch('/api/day?date=' + encodeURIComponent(date));
   if (!res.ok) {
     el('list').innerHTML = '<div class="empty">加载失败，请刷新页面</div>';
     return;
   }
   const data = await res.json();
-  state.date = data.date;
+  state.anchor = data.date;
   state.items = data.items;
   state.isToday = data.isToday;
   state.now = data.now;
+  state.restCount = data.restCount || 0;
   el('siteTitle').textContent = data.title || '用药提醒';
   document.title = (data.title || '用药提醒') + ' · 打卡';
-  renderDateLabel();
-  render();
+  renderLabels();
+  renderDay();
 }
 
-el('prevDay').addEventListener('click', () => load(shiftDate(state.date, -1)));
-el('nextDay').addEventListener('click', () => load(shiftDate(state.date, 1)));
+/* ---------- 周 / 月视图 ---------- */
 
-load(fmtDate(new Date()));
+function statRow(s) {
+  const rate = s.total ? Math.round((s.done / s.total) * 100) : 0;
+  return `
+    <div class="stat-row">
+      <div class="stat"><b>${s.fullDays}<i>/${s.activeDays}</i></b><span>全勤天数</span></div>
+      <div class="stat"><b>${s.done}<i>/${s.total}</i></b><span>完成项数</span></div>
+      <div class="stat"><b>${rate}%</b><span>完成率</span></div>
+    </div>`;
+}
 
-setInterval(async () => {
-  if (!state.isToday) return;
+function planList(plans) {
+  const rows = plans.filter((p) => p.total > 0);
+  if (!rows.length) return '';
+  return `
+    <div class="card">
+      <h3 class="card-h">按项目统计</h3>
+      <div class="pp-list">
+        ${rows
+          .map((p) => {
+            const r = pct(p.done, p.total);
+            return `
+          <div class="pp">
+            <span class="pp-time">${p.time}</span>
+            <span class="pp-name">${escapeHtml(p.name)}</span>
+            <span class="pp-bar"><i style="width:${r}%" class="${r === 100 ? 'full' : ''}"></i></span>
+            <span class="pp-num">${p.done}/${p.total}</span>
+          </div>`;
+          })
+          .join('')}
+      </div>
+    </div>`;
+}
+
+function renderWeek(data) {
+  const today = fmtDate(new Date());
+  const rows = data.days
+    .map((d) => {
+      const r = pct(d.done, d.total);
+      const cls = d.future ? ' future' : d.total === 0 ? ' skip' : d.done === d.total ? ' full' : '';
+      return `
+        <div class="dc${cls}${d.date === today ? ' today' : ''}" data-date="${d.date}">
+          <div class="dc-left">
+            <b>${WEEK_CN[d.dow - 1]}</b>
+            <span>${d.date.slice(5).replace('-', '/')}</span>
+          </div>
+          <div class="dc-mid">
+            <div class="bar"><i style="width:${r}%"></i></div>
+            <span class="dc-num">${d.total ? `${d.done}/${d.total}` : '—'}</span>
+          </div>
+        </div>`;
+    })
+    .join('');
+
+  el('rangeBody').innerHTML = statRow(data.summary) + `<div class="day-cards">${rows}</div>` + planList(data.plans);
+  bindDayTap();
+}
+
+function renderMonth(data) {
+  const today = fmtDate(new Date());
+  const [y, m] = data.from.split('-').map(Number);
+  const lead = isoDowOf(data.from) - 1; // 月初前需要留的空格数
+  const blanks = Array.from({ length: lead }, () => '<div class="cal-cell blank"></div>').join('');
+
+  const cells = data.days
+    .map((d) => {
+      const r = pct(d.done, d.total);
+      let cls = 'cal-cell';
+      if (d.future) cls += ' future';
+      else if (d.total === 0) cls += ' skip';
+      else if (d.done === d.total) cls += ' full';
+      else if (d.done === 0) cls += ' none';
+      else cls += ' part';
+      if (d.date === today) cls += ' today';
+      const dot = !d.future && d.total && d.done !== d.total
+        ? `<i class="cal-dot" style="--p:${r}%"></i>`
+        : '';
+      return `<div class="${cls}" data-date="${d.date}"><b>${Number(d.date.slice(8))}</b>${dot}</div>`;
+    })
+    .join('');
+
+  el('rangeBody').innerHTML = `
+    <div class="cal">
+      <div class="cal-title">${y} 年 ${m} 月</div>
+      <div class="cal-head">${WEEK_CN.map((w) => `<span>${w.slice(1)}</span>`).join('')}</div>
+      <div class="cal-grid">${blanks}${cells}</div>
+      <div class="cal-legend">
+        <span><i class="lg full"></i>全部完成</span>
+        <span><i class="lg part"></i>部分完成</span>
+        <span><i class="lg none"></i>未打卡</span>
+        <span><i class="lg skip"></i>无计划</span>
+      </div>
+    </div>` +
+    statRow(data.summary) +
+    planList(data.plans);
+  bindDayTap();
+}
+
+function bindDayTap() {
+  el('rangeBody').querySelectorAll('[data-date]').forEach((n) => {
+    n.addEventListener('click', () => switchView('day', n.dataset.date));
+  });
+}
+
+async function loadRange() {
+  const from = state.view === 'week' ? weekStartOf(state.anchor) : monthStartOf(state.anchor);
+  const to = state.view === 'week' ? shiftDate(from, 6) : monthEndOf(state.anchor);
+  el('rangeBody').innerHTML = '<div class="empty">加载中…</div>';
   try {
-    const res = await fetch('/api/day?date=' + encodeURIComponent(state.date));
+    const res = await fetch(`/api/range?from=${from}&to=${to}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || '加载失败');
+    if (state.view === 'week') renderWeek(data);
+    else renderMonth(data);
+  } catch (e) {
+    el('rangeBody').innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+/* ---------- 视图切换 ---------- */
+
+function switchView(view, anchor) {
+  state.view = view;
+  if (anchor) state.anchor = anchor;
+  document.querySelectorAll('#viewSeg button').forEach((b) => {
+    b.classList.toggle('active', b.dataset.view === view);
+  });
+  el('viewDay').hidden = view !== 'day';
+  el('viewRange').hidden = view === 'day';
+  renderLabels();
+  if (view === 'day') loadDay(state.anchor);
+  else loadRange();
+}
+
+document.querySelectorAll('#viewSeg button').forEach((btn) => {
+  btn.addEventListener('click', () => switchView(btn.dataset.view));
+});
+
+el('prevBtn').addEventListener('click', () => {
+  if (state.view === 'day') loadDay(shiftDate(state.anchor, -1));
+  else if (state.view === 'week') {
+    state.anchor = shiftDate(state.anchor, -7);
+    renderLabels();
+    loadRange();
+  } else {
+    state.anchor = shiftMonth(state.anchor, -1);
+    renderLabels();
+    loadRange();
+  }
+});
+
+el('nextBtn').addEventListener('click', () => {
+  if (state.view === 'day') loadDay(shiftDate(state.anchor, 1));
+  else if (state.view === 'week') {
+    state.anchor = shiftDate(state.anchor, 7);
+    renderLabels();
+    loadRange();
+  } else {
+    state.anchor = shiftMonth(state.anchor, 1);
+    renderLabels();
+    loadRange();
+  }
+});
+
+/* 每分钟同步一次今日状态（仅日视图且为今天） */
+setInterval(async () => {
+  if (state.view !== 'day' || !state.isToday) return;
+  try {
+    const res = await fetch('/api/day?date=' + encodeURIComponent(state.anchor));
     if (!res.ok) return;
     const data = await res.json();
     state.now = data.now;
-    if (JSON.stringify(data.items.map(i => [i.id, i.done])) !== JSON.stringify(state.items.map(i => [i.id, i.done]))) {
+    if (JSON.stringify(data.items.map((i) => [i.id, i.done])) !== JSON.stringify((state.items || []).map((i) => [i.id, i.done]))) {
       state.items = data.items;
     }
-    render();
+    renderDay();
   } catch { /* 静默 */ }
 }, 60000);
+
+switchView('day');
 </script>
 </body>
 </html>

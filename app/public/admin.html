@@ -32,7 +32,8 @@
     <div class="card">
       <h2>用药计划表</h2>
       <p class="hint">
-        一行对应一个时间点。时间格式 24 小时制 HH:MM；停用的行不会推送提醒，也不计入打卡总数。
+        一行对应一个时间点。时间格式 24 小时制 HH:MM；「星期」按钮点亮表示该天执行，全亮即每天。
+        「启用」管是否执行与计分，「推送」管这条是否发微信——两项互不影响，勾掉推送后仍可在打卡页手动勾选。
         修改后点该行的「保存」生效。
       </p>
       <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
@@ -42,16 +43,18 @@
         <span class="badge" id="planCount">0 行</span>
       </div>
       <div class="table-scroll">
-        <table class="grid">
+        <table class="grid grid-wide">
           <thead>
             <tr>
-              <th style="width:100px">时间</th>
-              <th style="min-width:140px">药品 / 项目</th>
-              <th style="width:100px">剂量</th>
-              <th style="width:100px">方式</th>
-              <th style="min-width:160px">备注</th>
-              <th style="width:56px">启用</th>
-              <th style="width:120px">操作</th>
+              <th style="width:96px">时间</th>
+              <th style="min-width:138px">药品 / 项目</th>
+              <th style="width:76px">剂量</th>
+              <th style="width:76px">方式</th>
+              <th style="min-width:106px">备注</th>
+              <th style="width:160px">星期</th>
+              <th style="width:44px">启用</th>
+              <th style="width:44px" title="取消勾选后该条不发微信，只能手动来打卡">推送</th>
+              <th style="width:100px">操作</th>
             </tr>
           </thead>
           <tbody id="planBody"></tbody>
@@ -63,35 +66,89 @@
 
   <div class="panel" id="panel-push">
     <div class="card">
-      <h2>推送通道</h2>
-      <p class="hint">
-        选择一种通道并填写凭据。开启「隐私模式」后，推送正文只提示有待办事项，不包含药品名称。
+      <h2>怎么让几个人都收到</h2>
+      <div class="guide">
+        <div class="guide-item">
+          <div class="guide-h"><span class="badge ok">推荐</span> 企业微信群机器人 —— 同群的人都能看到</div>
+          <ol class="guide-ol">
+            <li>注册一个企业微信（注册时选「团队」，个人也能注册，不需要营业执照），把家人的手机号加进通讯录，对方按短信提示加入</li>
+            <li>在手机企业微信里建一个只有你们几个的<strong>内部群</strong>，进群 → 右上角「…」→ 群机器人 → 添加 → 复制 Webhook 地址</li>
+            <li>地址填到下面「企业微信 Webhook」，打开「群内 @所有人」，点「发送测试推送」，群里手机都会响</li>
+          </ol>
+        </div>
+        <div class="guide-item">
+          <div class="guide-h"><span class="badge">备选</span> Server 酱 —— 不用建群，各自微信收到服务号消息</div>
+          <ol class="guide-ol">
+            <li>每人用微信扫码登录 <code>sct.ftqq.com</code>，各拿一个 SendKey</li>
+            <li>几个 SendKey 用逗号隔开填进下方同一个输入框，一次会发几条，各收各的</li>
+          </ol>
+        </div>
+      </div>
+      <p class="hint" style="margin-top:14px">
+        企业微信群机器人只能加在<strong>企业微信内部群</strong>，普通微信群加不了机器人。
+        所以这条路要求收消息的人都在同一个企业微信团队里，每人装一次企业微信即可，之后消息走企业微信。
+        不想装就用 Server 酱。
       </p>
+    </div>
+
+    <div class="card">
+      <h2>推送设置</h2>
       <div class="form-row">
         <label>总开关</label>
-        <div><label class="switch"><input type="checkbox" id="push_enabled" /> 到点自动推送</label></div>
+        <div class="wide">
+          <label class="switch"><input type="checkbox" id="push_enabled" /> 到点自动推送</label>
+          <div class="field-note">关掉后提醒、催办、晚间总结都不再发送</div>
+        </div>
       </div>
       <div class="form-row">
         <label>推送渠道</label>
         <div class="wide">
           <select id="push_channel">
+            <option value="wecom">企业微信群机器人（推荐）</option>
             <option value="serverchan">Server 酱（微信）</option>
-            <option value="wecom">企业微信群机器人</option>
             <option value="custom">自定义 Webhook</option>
           </select>
         </div>
       </div>
       <div class="form-row">
-        <label>SendKey</label>
-        <div class="wide"><input type="password" id="serverchan_key" placeholder="SCT... 来自 sctapi.ftqq.com" /></div>
+        <label>企业微信 Webhook</label>
+        <div class="wide">
+          <input type="text" id="wecom_webhook" placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=..." />
+          <div class="field-note">群机器人地址，一个群一条，群里的人都能收到</div>
+        </div>
       </div>
       <div class="form-row">
-        <label>企业微信 Webhook</label>
-        <div class="wide"><input type="text" id="wecom_webhook" placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=..." /></div>
+        <label>群内 @所有人</label>
+        <div><label class="switch"><input type="checkbox" id="wecom_mention_all" /> 消息里 @所有人（更醒目，手机更容易弹提醒）</label></div>
+      </div>
+      <div class="form-row">
+        <label>SendKey</label>
+        <div class="wide">
+          <input type="password" id="serverchan_key" placeholder="SCT...；多人各一个，用逗号隔开" />
+          <div class="field-note">支持多个，用逗号或换行分隔，最多 10 个；全部成功才算成功。已保存的值显示为圆点，重新输入即覆盖</div>
+        </div>
       </div>
       <div class="form-row">
         <label>自定义 Webhook</label>
         <div class="wide"><input type="text" id="custom_webhook" placeholder="https://example.com/hook（POST JSON）" /></div>
+      </div>
+      <div class="form-row">
+        <label>超时催办</label>
+        <div class="wide">
+          <input type="number" id="remind_after" min="0" max="180" step="1" class="w-narrow" placeholder="20" />
+          <div class="field-note">到点后多少分钟还没打卡，再发一条催办；0 = 不催；上限 180</div>
+        </div>
+      </div>
+      <div class="form-row">
+        <label>晚间总结</label>
+        <div class="wide">
+          <label class="switch"><input type="checkbox" id="evening_summary" /> 每天晚上发一条当天完成情况</label>
+          <div class="field-note" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            发送时间
+            <input type="time" id="evening_time" class="w-time" value="21:30" />
+            关闭则完全不发；开着但当天没有要执行的项目时也不发；需总开关开启
+          </div>
+        </div>
       </div>
       <div class="form-row">
         <label>隐私模式</label>
@@ -103,11 +160,16 @@
       </div>
       <div class="form-row">
         <label>管理口令</label>
-        <div class="wide"><input type="password" id="admin_token" placeholder="留空则不校验（仅限可信局域网）" /></div>
+        <div class="wide">
+          <input type="password" id="admin_token" placeholder="留空则不校验（仅限可信局域网）" />
+          <div class="field-note">已保存的显示为圆点，不动即保持原值；清空并保存等于取消口令</div>
+        </div>
       </div>
-      <div style="display:flex;gap:8px;margin-top:16px">
+      <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
         <button class="btn btn-primary" id="saveSettings">保存设置</button>
         <button class="btn" id="testPush">发送测试推送</button>
+        <button class="btn" id="testRemind">发送催办样张</button>
+        <button class="btn" id="testSummary">发送总结样张</button>
       </div>
       <div class="result" id="pushMsg"></div>
     </div>
@@ -116,7 +178,7 @@
   <div class="panel" id="panel-logs">
     <div class="card">
       <h2>推送记录</h2>
-      <p class="hint">每次自动推送与测试推送都会留档。同一计划、同一天、同一时间最多尝试 3 次。</p>
+      <p class="hint">每次自动推送、超时催办、晚间总结与测试推送都会留档。同一计划、同一天、同一时间、同一类型最多尝试 3 次。</p>
       <div style="display:flex;gap:8px;margin-bottom:12px">
         <button class="btn btn-sm" id="refreshLogs">刷新</button>
       </div>
@@ -125,6 +187,7 @@
           <thead>
             <tr>
               <th style="width:150px">时间</th>
+              <th style="width:70px">类型</th>
               <th style="width:90px">计划</th>
               <th style="width:110px">渠道</th>
               <th style="width:70px">结果</th>
@@ -155,13 +218,16 @@
       <hr class="sep" />
       <h3 class="sub-h">导入用药计划</h3>
       <p class="hint">
-        每行一条，列顺序 <code>时间, 药品/项目, 剂量, 方式, 备注, 启用</code>，后四列可留空。
+        每行一条。列顺序 <code>时间, 药品/项目, 剂量, 方式, 备注, 启用, 星期, 推送</code>，后五列可留空。
+        星期列可写 <code>每天</code>、<code>工作日</code>、<code>周末</code>、
+        <code>周一、周三</code>，留空视为每天；若只用数字（如 <code>1,3,5</code>）需用英文引号包住整格。
+        推送列写 <code>否</code> 表示这条不发微信，留空视为发。
         支持从 Excel 直接复制（制表符分隔），也可导入本页导出的 <code>plans.csv</code>。
         首行表头会自动跳过，重复的「时间+药品」不会重复导入。
       </p>
-      <textarea id="importText" rows="7" spellcheck="false" placeholder="07:00,示例药品 A,1 片,口服,早餐前
-08:00,示例药品 B,半片,口服,
-12:30,示例测量项,,测血糖,"></textarea>
+      <textarea id="importText" rows="7" spellcheck="false" placeholder="07:00,示例药品 A,1 片,口服,早餐前,是,每天,是
+08:00,示例药品 B,半片,口服,,是,工作日,是
+12:30,示例测量项,,测血糖,,是,周一、周三、周五,否"></textarea>
       <div class="import-bar">
         <label class="file-pick">选择 CSV 文件<input type="file" id="importFile" accept=".csv,.txt,text/csv,text/plain" /></label>
         <label class="radio"><input type="radio" name="importMode" value="append" checked /> 追加</label>
@@ -186,6 +252,7 @@
 
 <script>
 const $ = (id) => document.getElementById(id);
+const MASK = '••••••••';
 let token = localStorage.getItem('pill_admin_token') || '';
 $('tokenInput').value = '';
 
@@ -238,11 +305,32 @@ function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+const WD_CN = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+const WD_SHORT = ['一', '二', '三', '四', '五', '六', '日'];
+
+function wdPickerHtml(row) {
+  const m = Number(row.weekdays) || 127;
+  return `<div class="wd-picker">${WD_SHORT.map((l, i) => {
+    const on = m & (1 << i) ? ' on' : '';
+    return `<button type="button" data-bit="${i}" class="wd-btn${on}" title="周${l}">${l}</button>`;
+  }).join('')}</div>`;
+}
+
+function wdLabel(mask) {
+  const m = Number(mask) || 127;
+  if (m === 127) return '每天';
+  if (m === 31) return '工作日';
+  if (m === 96) return '周末';
+  const out = [];
+  for (let i = 0; i < 7; i++) if (m & (1 << i)) out.push(WD_CN[i]);
+  return out.join('、') || '每天';
+}
+
 function renderPlans() {
   const body = $('planBody');
   body.innerHTML = '';
   if (!rows.length) {
-    body.innerHTML = '<tr><td colspan="7" style="color:#9aa09b;padding:24px 6px;text-align:center">还没有计划，点「+ 新增一行」开始</td></tr>';
+    body.innerHTML = '<tr><td colspan="9" style="color:#9aa09b;padding:24px 6px;text-align:center">还没有计划，点「+ 新增一行」开始</td></tr>';
     $('planCount').textContent = '0 行';
     return;
   }
@@ -255,9 +343,11 @@ function renderPlans() {
       <td><input type="time" class="w-time" data-f="time" value="${esc(row.time)}" /></td>
       <td><input type="text" data-f="name" value="${esc(row.name)}" placeholder="药品名称" maxlength="60" /></td>
       <td><input type="text" data-f="dose" value="${esc(row.dose)}" placeholder="如 1 片" maxlength="40" /></td>
-      <td><input type="text" data-f="method" value="${esc(row.method)}" placeholder="口服/自测" maxlength="20" /></td>
+      <td><input type="text" data-f="method" value="${esc(row.method)}" placeholder="口服" maxlength="20" /></td>
       <td><input type="text" data-f="note" value="${esc(row.note)}" placeholder="护理提示（可选）" maxlength="120" /></td>
+      <td>${wdPickerHtml(row)}</td>
       <td style="text-align:center"><input type="checkbox" data-f="enabled" ${row.enabled ? 'checked' : ''} style="width:16px;height:16px;accent-color:#0f6e56" /></td>
+      <td style="text-align:center"><input type="checkbox" data-f="push_on" ${row.push_on ? 'checked' : ''} style="width:16px;height:16px;accent-color:#0f6e56" /></td>
       <td>
         <div class="row-actions">
           <button class="btn btn-sm" data-act="save">保存</button>
@@ -265,26 +355,36 @@ function renderPlans() {
         </div>
       </td>`;
 
+    tr.querySelector('.wd-picker').addEventListener('click', (ev) => {
+      const btn = ev.target.closest('button[data-bit]');
+      if (!btn) return;
+      const bit = 1 << Number(btn.dataset.bit);
+      row.weekdays = row.weekdays & bit ? row.weekdays & ~bit : row.weekdays | bit;
+      btn.classList.toggle('on', !!(row.weekdays & bit));
+    });
+
     const inputs = tr.querySelectorAll('[data-f]');
     inputs.forEach((inp) => {
       const ev = inp.type === 'checkbox' ? 'change' : 'input';
       inp.addEventListener(ev, async () => {
         const f = inp.dataset.f;
-        if (f === 'enabled') {
-          row.enabled = inp.checked ? 1 : 0;
-          tr.classList.toggle('off', !row.enabled);
-          if (row.id) {
-            try {
-              await api('/api/plans/' + row.id + '/enabled', {
-                method: 'PATCH',
-                body: JSON.stringify({ enabled: !!row.enabled })
-              });
-            } catch (e) {
-              row.enabled = row.enabled ? 0 : 1;
-              inp.checked = !!row.enabled;
-              tr.classList.toggle('off', !row.enabled);
-              showMsg('planMsg', e.message, false);
+        if (f === 'enabled' || f === 'push_on') {
+          row[f] = inp.checked ? 1 : 0;
+          if (f === 'enabled') tr.classList.toggle('off', !row.enabled);
+          if (!row.id) return;
+          try {
+            await api('/api/plans/' + row.id + '/' + (f === 'enabled' ? 'enabled' : 'push'), {
+              method: 'PATCH',
+              body: JSON.stringify(f === 'enabled' ? { enabled: !!row[f] } : { push_on: !!row[f] })
+            });
+            if (f === 'push_on') {
+              showMsg('planMsg', row.push_on ? '已开启推送' : '已关闭推送（该条不再发微信）', true);
             }
+          } catch (e) {
+            row[f] = row[f] ? 0 : 1;
+            inp.checked = !!row[f];
+            if (f === 'enabled') tr.classList.toggle('off', !row.enabled);
+            showMsg('planMsg', e.message, false);
           }
         } else {
           row[f] = inp.value;
@@ -301,7 +401,12 @@ function renderPlans() {
 async function loadPlans() {
   try {
     const data = await api('/api/plans');
-    rows = data.items.map((p) => ({ ...p, enabled: p.enabled ? 1 : 0 }));
+    rows = data.items.map((p) => ({
+      ...p,
+      enabled: p.enabled ? 1 : 0,
+      push_on: p.push_on ? 1 : 0,
+      weekdays: Number(p.weekdays) || 127
+    }));
     renderPlans();
   } catch (e) {
     showMsg('planMsg', e.message, false);
@@ -311,12 +416,15 @@ async function loadPlans() {
 async function saveRow(row, idx) {
   if (!row.time) return showMsg('planMsg', '请先填写时间（HH:MM）', false);
   if (!row.name || !row.name.trim()) return showMsg('planMsg', '请填写药品或项目名称', false);
+  if (!row.weekdays) return showMsg('planMsg', '请至少点亮一个星期', false);
   const payload = {
     time: row.time,
     name: row.name,
     dose: row.dose,
     method: row.method,
     note: row.note,
+    weekdays: row.weekdays,
+    push_on: row.push_on ? 1 : 0,
     enabled: row.enabled ? 1 : 0
   };
   try {
@@ -325,7 +433,12 @@ async function saveRow(row, idx) {
       showMsg('planMsg', `已保存：${payload.time} ${payload.name}`, true);
     } else {
       const data = await api('/api/plans', { method: 'POST', body: JSON.stringify(payload) });
-      rows[idx] = { ...data.item, enabled: data.item.enabled ? 1 : 0 };
+      rows[idx] = {
+        ...data.item,
+        enabled: data.item.enabled ? 1 : 0,
+        push_on: data.item.push_on ? 1 : 0,
+        weekdays: Number(data.item.weekdays) || 127
+      };
       showMsg('planMsg', `已新增：${payload.time} ${payload.name}`, true);
     }
     await loadPlans();
@@ -352,7 +465,7 @@ function deleteRow(row) {
 }
 
 $('addRow').addEventListener('click', () => {
-  rows.push({ id: null, time: '', name: '', dose: '', method: '', note: '', enabled: 1 });
+  rows.push({ id: null, time: '', name: '', dose: '', method: '', note: '', weekdays: 127, push_on: 1, enabled: 1 });
   renderPlans();
   const body = $('planBody');
   const last = body.lastElementChild;
@@ -368,10 +481,14 @@ async function loadSettings() {
     const data = await api('/api/settings');
     const s = data.settings;
     $('push_enabled').checked = s.push_enabled === '1';
-    $('push_channel').value = s.push_channel || 'serverchan';
+    $('push_channel').value = s.push_channel || 'wecom';
     $('serverchan_key').value = s.serverchan_key || '';
     $('wecom_webhook').value = s.wecom_webhook || '';
+    $('wecom_mention_all').checked = s.wecom_mention_all === '1';
     $('custom_webhook').value = s.custom_webhook || '';
+    $('remind_after').value = s.remind_after === '' || s.remind_after === undefined ? '20' : s.remind_after;
+    $('evening_summary').checked = s.evening_summary === '1';
+    $('evening_time').value = s.evening_time || '21:30';
     $('privacy_mode').checked = s.privacy_mode === '1';
     $('site_title').value = s.site_title || '';
     $('admin_token').value = s.admin_token || '';
@@ -387,34 +504,50 @@ $('saveSettings').addEventListener('click', async () => {
     push_channel: $('push_channel').value,
     serverchan_key: $('serverchan_key').value.trim(),
     wecom_webhook: $('wecom_webhook').value.trim(),
+    wecom_mention_all: $('wecom_mention_all').checked ? '1' : '0',
     custom_webhook: $('custom_webhook').value.trim(),
+    remind_after: $('remind_after').value.trim() === '' ? '20' : String(Number($('remind_after').value)),
+    evening_summary: $('evening_summary').checked ? '1' : '0',
+    evening_time: $('evening_time').value || '21:30',
     privacy_mode: $('privacy_mode').checked ? '1' : '0',
     site_title: $('site_title').value.trim(),
     admin_token: $('admin_token').value
   };
+  if (!Number.isFinite(Number(payload.remind_after)) || Number(payload.remind_after) < 0 || Number(payload.remind_after) > 180) {
+    return showMsg('pushMsg', '催办延迟请填 0–180 之间的整数分钟（0 表示不催办）', false);
+  }
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(payload.evening_time)) {
+    return showMsg('pushMsg', '总结时间格式应为 HH:MM', false);
+  }
   try {
     await api('/api/settings', { method: 'PUT', body: JSON.stringify(payload) });
-    token = payload.admin_token;
-    localStorage.setItem('pill_admin_token', token);
+    if (payload.admin_token !== MASK) {
+      token = payload.admin_token;
+      localStorage.setItem('pill_admin_token', token);
+    }
     $('tokenInput').value = '';
-    showMsg('pushMsg', '设置已保存' + (payload.push_enabled === '1' ? '，自动推送已开启' : '，自动推送处于关闭状态'), true);
+    const remindTip = Number(payload.remind_after) > 0 ? `，超时 ${payload.remind_after} 分钟未打卡会催办一次` : '，超时催办已关闭';
+    const eveningTip = payload.evening_summary === '1' ? `，每天 ${payload.evening_time} 发总结` : '，晚间总结已关闭';
+    showMsg('pushMsg', '设置已保存' + (payload.push_enabled === '1' ? '，自动推送已开启' + remindTip + eveningTip : '，自动推送处于关闭状态（提醒、催办、总结都不会发）'), true);
     loadPlans();
   } catch (e) {
     showMsg('pushMsg', e.message, false);
   }
 });
 
-$('testPush').addEventListener('click', async () => {
-  const btn = $('testPush');
+const TEST_LABEL = { first: '测试推送', remind: '催办样张', evening: '总结样张' };
+
+async function runTest(kind) {
+  const btn = kind === 'remind' ? $('testRemind') : kind === 'evening' ? $('testSummary') : $('testPush');
   btn.disabled = true;
-  showMsg('pushMsg', '正在发送测试推送…', true);
+  showMsg('pushMsg', `正在发送${TEST_LABEL[kind]}…`, true);
   try {
-    const r = await api('/api/push/test', { method: 'POST' });
+    const r = await api('/api/push/test', { method: 'POST', body: JSON.stringify({ kind }) });
     showMsg(
       'pushMsg',
       r.ok
-        ? `测试推送成功（${r.channel}）\n标题：${r.preview.title}`
-        : `测试推送失败：${r.detail}`,
+        ? `${TEST_LABEL[kind]}已发出（${r.channel}）\n标题：${r.preview.title}\n正文：${r.preview.content}`
+        : `发送失败：${r.detail}`,
       r.ok
     );
   } catch (e) {
@@ -422,31 +555,36 @@ $('testPush').addEventListener('click', async () => {
   } finally {
     btn.disabled = false;
   }
-});
+}
+
+$('testPush').addEventListener('click', () => runTest('first'));
+$('testRemind').addEventListener('click', () => runTest('remind'));
+$('testSummary').addEventListener('click', () => runTest('evening'));
 
 /* ---------- 日志 ---------- */
 
 async function loadLogs() {
   const body = $('logBody');
-  body.innerHTML = '<tr><td colspan="5" style="color:#9aa09b;padding:20px 6px">加载中…</td></tr>';
+    body.innerHTML = '<tr><td colspan="6" style="color:#9aa09b;padding:20px 6px">加载中…</td></tr>';
   try {
     const data = await api('/api/logs?limit=100');
     if (!data.items.length) {
-      body.innerHTML = '<tr><td colspan="5" style="color:#9aa09b;padding:20px 6px">暂无记录</td></tr>';
+      body.innerHTML = '<tr><td colspan="6" style="color:#9aa09b;padding:20px 6px">暂无记录</td></tr>';
       return;
     }
     body.innerHTML = data.items
       .map((l) => `
         <tr>
           <td style="font-variant-numeric:tabular-nums">${esc(l.created_at)}</td>
-          <td>${l.plan_name ? esc(l.plan_name) : '测试'}</td>
+          <td>${l.kind === 'remind' ? '<span class="badge warn-b">催办</span>' : l.kind === 'evening' ? '<span class="badge">总结</span>' : '<span class="badge">首次</span>'}</td>
+          <td>${l.plan_name ? esc(l.plan_name) : l.kind === 'evening' ? '晚间总结' : '测试'}</td>
           <td>${esc(l.channel)}</td>
           <td><span class="badge ${l.ok ? 'ok' : 'err'}">${l.ok ? '成功' : '失败'}</span></td>
           <td style="color:#6b716c">${esc(l.detail)}</td>
         </tr>`)
       .join('');
   } catch (e) {
-    body.innerHTML = `<tr><td colspan="5" style="color:#a32d2d;padding:20px 6px">${esc(e.message)}</td></tr>`;
+    body.innerHTML = `<tr><td colspan="6" style="color:#a32d2d;padding:20px 6px">${esc(e.message)}</td></tr>`;
   }
 }
 
@@ -483,8 +621,14 @@ function csvCell(v) {
 $('exportPlans').addEventListener('click', async () => {
   try {
     const data = await api('/api/plans');
-    const lines = ['时间,药品/项目,剂量,方式,备注,启用'];
-    data.items.forEach((p) => lines.push([p.time, p.name, p.dose, p.method, p.note, p.enabled ? '是' : '否'].map(csvCell).join(',')));
+    const lines = ['时间,药品/项目,剂量,方式,备注,启用,星期,推送'];
+    data.items.forEach((p) =>
+      lines.push(
+        [p.time, p.name, p.dose, p.method, p.note, p.enabled ? '是' : '否', wdLabel(p.weekdays), p.push_on ? '是' : '否']
+          .map(csvCell)
+          .join(',')
+      )
+    );
     download('plans.csv', lines.join('\n'));
     showMsg('dataMsg', '已导出 plans.csv', true);
   } catch (e) {
@@ -567,7 +711,9 @@ function rowsFromText(text) {
       dose: c[2] || '',
       method: c[3] || '',
       note: c[4] || '',
-      enabled: normEnabled(c[5])
+      enabled: normEnabled(c[5]),
+      weekdays: c[6] || '',
+      push_on: normEnabled(c[7])
     });
   }
   return items;

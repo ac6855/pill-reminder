@@ -1,9 +1,9 @@
 {
   "name": "pill-reminder",
-  "version": "1.0.0",
+  "version": "1.3.0",
   "private": true,
   "type": "module",
-  "description": "轻量用药提醒服务：SQLite 存储 + 移动端打卡页 + 微信推送，零第三方依赖",
+  "description": "自托管用药提醒：定时微信推送、打卡页、按星期排程、日/周/月记录，数据存 SQLite",
   "engines": {
     "node": ">=22.5"
   },
