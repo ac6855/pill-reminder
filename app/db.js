@@ -153,6 +153,7 @@ const DEFAULT_SETTINGS = {
   push_enabled: '0',
   push_channel: 'serverchan',
   serverchan_key: '',
+  pushplus_token: '',
   wecom_webhook: '',
   wecom_mention_all: '1',
   custom_webhook: '',

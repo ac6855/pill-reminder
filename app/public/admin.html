@@ -34,12 +34,13 @@
       <p class="hint">
         一行对应一个时间点。时间格式 24 小时制 HH:MM；「星期」按钮点亮表示该天执行，全亮即每天。
         「启用」管是否执行与计分，「推送」管这条是否发微信——两项互不影响，勾掉推送后仍可在打卡页手动勾选。
-        修改后点该行的「保存」生效。
+        改完点表格右上方的「保存全部」一次提交。
       </p>
       <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
         <button class="btn btn-primary btn-sm" id="addRow">+ 新增一行</button>
         <button class="btn btn-sm" id="refreshPlans">刷新</button>
         <span style="flex:1"></span>
+        <button class="btn btn-primary btn-sm" id="saveAll">保存全部</button>
         <span class="badge" id="planCount">0 行</span>
       </div>
       <div class="table-scroll">
@@ -54,7 +55,7 @@
               <th style="width:160px">星期</th>
               <th style="width:44px">启用</th>
               <th style="width:44px" title="取消勾选后该条不发微信，只能手动来打卡">推送</th>
-              <th style="width:100px">操作</th>
+              <th style="width:72px">操作</th>
             </tr>
           </thead>
           <tbody id="planBody"></tbody>
@@ -69,25 +70,26 @@
       <h2>怎么让几个人都收到</h2>
       <div class="guide">
         <div class="guide-item">
-          <div class="guide-h"><span class="badge ok">推荐</span> 企业微信群机器人 —— 同群的人都能看到</div>
+          <div class="guide-h"><span class="badge ok">推荐</span> PushPlus —— 关注一个公众号就能收，不用装 App 也不用建群</div>
           <ol class="guide-ol">
-            <li>注册一个企业微信（注册时选「团队」，个人也能注册，不需要营业执照），把家人的手机号加进通讯录，对方按短信提示加入</li>
-            <li>在手机企业微信里建一个只有你们几个的<strong>内部群</strong>，进群 → 右上角「…」→ 群机器人 → 添加 → 复制 Webhook 地址</li>
-            <li>地址填到下面「企业微信 Webhook」，打开「群内 @所有人」，点「发送测试推送」，群里手机都会响</li>
+            <li>微信搜公众号「pushplus 推送加」，关注后发送「token」，它会回一串 token 给你</li>
+            <li>在它的个人中心完成<strong>实名认证</strong>，不实名接口一律返回 905，发不出去</li>
+            <li>每人一个 token，逗号隔开填到下面「PushPlus Token」，点「发送测试推送」</li>
           </ol>
         </div>
         <div class="guide-item">
-          <div class="guide-h"><span class="badge">备选</span> Server 酱 —— 不用建群，各自微信收到服务号消息</div>
+          <div class="guide-h"><span class="badge">备选</span> 企业微信群机器人 —— 收消息的人都要装企业微信</div>
           <ol class="guide-ol">
-            <li>每人用微信扫码登录 <code>sct.ftqq.com</code>，各拿一个 SendKey</li>
-            <li>几个 SendKey 用逗号隔开填进下方同一个输入框，一次会发几条，各收各的</li>
+            <li>注册一个企业微信（选「团队」，个人也能注册），把家人手机号加进通讯录</li>
+            <li>电脑端进群 → 右上角「···」→ 群机器人 → 添加 → 复制 Webhook</li>
+            <li>填到下面「企业微信 Webhook」，打开「群内 @所有人」</li>
           </ol>
         </div>
       </div>
       <p class="hint" style="margin-top:14px">
-        企业微信群机器人只能加在<strong>企业微信内部群</strong>，普通微信群加不了机器人。
-        所以这条路要求收消息的人都在同一个企业微信团队里，每人装一次企业微信即可，之后消息走企业微信。
-        不想装就用 Server 酱。
+        三条通道按省事程度排：PushPlus 最轻，关注公众号即可，免费 200 条/天；
+        企业微信群机器人要多装一个 App，且只有内部群能加；
+        Server 酱什么都不用装，但免费只有每天 5 条，日常提醒不够用。
       </p>
     </div>
 
@@ -104,10 +106,21 @@
         <label>推送渠道</label>
         <div class="wide">
           <select id="push_channel">
-            <option value="wecom">企业微信群机器人（推荐）</option>
+            <option value="pushplus">PushPlus（微信服务号，推荐）</option>
+            <option value="wecom">企业微信群机器人</option>
             <option value="serverchan">Server 酱（微信）</option>
             <option value="custom">自定义 Webhook</option>
           </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <label>PushPlus Token</label>
+        <div class="wide">
+          <input type="password" id="pushplus_token" placeholder="每人一个，用逗号隔开" />
+          <div class="field-note">
+            关注公众号「pushplus 推送加」→ 发送「token」即可获取；免费 200 条/天。
+            <strong>必须先实名认证</strong>，否则接口返回 905，一条都发不出
+          </div>
         </div>
       </div>
       <div class="form-row">
@@ -332,11 +345,12 @@ function renderPlans() {
   if (!rows.length) {
     body.innerHTML = '<tr><td colspan="9" style="color:#9aa09b;padding:24px 6px;text-align:center">还没有计划，点「+ 新增一行」开始</td></tr>';
     $('planCount').textContent = '0 行';
+    updateSaveBtn();
     return;
   }
   $('planCount').textContent = rows.length + ' 行';
 
-  rows.forEach((row, idx) => {
+  rows.forEach((row) => {
     const tr = document.createElement('tr');
     if (!row.enabled) tr.className = 'off';
     tr.innerHTML = `
@@ -350,7 +364,6 @@ function renderPlans() {
       <td style="text-align:center"><input type="checkbox" data-f="push_on" ${row.push_on ? 'checked' : ''} style="width:16px;height:16px;accent-color:#0f6e56" /></td>
       <td>
         <div class="row-actions">
-          <button class="btn btn-sm" data-act="save">保存</button>
           <button class="btn btn-sm btn-danger" data-act="del">删除</button>
         </div>
       </td>`;
@@ -361,41 +374,28 @@ function renderPlans() {
       const bit = 1 << Number(btn.dataset.bit);
       row.weekdays = row.weekdays & bit ? row.weekdays & ~bit : row.weekdays | bit;
       btn.classList.toggle('on', !!(row.weekdays & bit));
+      markDirty(row);
     });
 
     const inputs = tr.querySelectorAll('[data-f]');
     inputs.forEach((inp) => {
       const ev = inp.type === 'checkbox' ? 'change' : 'input';
-      inp.addEventListener(ev, async () => {
+      inp.addEventListener(ev, () => {
         const f = inp.dataset.f;
         if (f === 'enabled' || f === 'push_on') {
           row[f] = inp.checked ? 1 : 0;
           if (f === 'enabled') tr.classList.toggle('off', !row.enabled);
-          if (!row.id) return;
-          try {
-            await api('/api/plans/' + row.id + '/' + (f === 'enabled' ? 'enabled' : 'push'), {
-              method: 'PATCH',
-              body: JSON.stringify(f === 'enabled' ? { enabled: !!row[f] } : { push_on: !!row[f] })
-            });
-            if (f === 'push_on') {
-              showMsg('planMsg', row.push_on ? '已开启推送' : '已关闭推送（该条不再发微信）', true);
-            }
-          } catch (e) {
-            row[f] = row[f] ? 0 : 1;
-            inp.checked = !!row[f];
-            if (f === 'enabled') tr.classList.toggle('off', !row.enabled);
-            showMsg('planMsg', e.message, false);
-          }
         } else {
           row[f] = inp.value;
         }
+        markDirty(row);
       });
     });
 
-    tr.querySelector('[data-act="save"]').addEventListener('click', () => saveRow(row, idx));
     tr.querySelector('[data-act="del"]').addEventListener('click', () => deleteRow(row));
     body.appendChild(tr);
   });
+  updateSaveBtn();
 }
 
 async function loadPlans() {
@@ -413,37 +413,79 @@ async function loadPlans() {
   }
 }
 
-async function saveRow(row, idx) {
-  if (!row.time) return showMsg('planMsg', '请先填写时间（HH:MM）', false);
-  if (!row.name || !row.name.trim()) return showMsg('planMsg', '请填写药品或项目名称', false);
-  if (!row.weekdays) return showMsg('planMsg', '请至少点亮一个星期', false);
-  const payload = {
-    time: row.time,
-    name: row.name,
-    dose: row.dose,
-    method: row.method,
-    note: row.note,
-    weekdays: row.weekdays,
-    push_on: row.push_on ? 1 : 0,
-    enabled: row.enabled ? 1 : 0
-  };
-  try {
-    if (row.id) {
-      await api('/api/plans/' + row.id, { method: 'PUT', body: JSON.stringify(payload) });
-      showMsg('planMsg', `已保存：${payload.time} ${payload.name}`, true);
-    } else {
-      const data = await api('/api/plans', { method: 'POST', body: JSON.stringify(payload) });
-      rows[idx] = {
-        ...data.item,
-        enabled: data.item.enabled ? 1 : 0,
-        push_on: data.item.push_on ? 1 : 0,
-        weekdays: Number(data.item.weekdays) || 127
-      };
-      showMsg('planMsg', `已新增：${payload.time} ${payload.name}`, true);
+/* ---------- 统一保存 ---------- */
+
+const isBlankNew = (r) => !r.id && !String(r.time || '').trim() && !String(r.name || '').trim();
+const pendingRows = () => rows.filter((r) => (r.__dirty || !r.id) && !isBlankNew(r));
+
+function markDirty(row) {
+  row.__dirty = true;
+  updateSaveBtn();
+  $('planMsg').className = 'result';
+}
+
+function updateSaveBtn() {
+  const n = pendingRows().length;
+  $('saveAll').textContent = n ? `保存全部 · ${n} 项待保存` : '保存全部';
+}
+
+async function saveAllPlans() {
+  // 点了「新增一行」又什么都没填的，直接丢掉，不当错误报
+  const blanks = rows.filter(isBlankNew);
+  if (blanks.length) {
+    rows = rows.filter((r) => !isBlankNew(r));
+    renderPlans();
+  }
+
+  const targets = rows.filter((r) => r.__dirty || !r.id);
+  if (!targets.length) {
+    return showMsg('planMsg', blanks.length ? '已丢弃空白行，没有需要保存的改动' : '没有需要保存的改动', true);
+  }
+
+  const bad = [];
+  targets.forEach((r) => {
+    const no = rows.indexOf(r) + 1;
+    if (!r.time) bad.push(`第 ${no} 行：时间未填`);
+    else if (!String(r.name || '').trim()) bad.push(`第 ${no} 行：名称未填`);
+    else if (!r.weekdays) bad.push(`第 ${no} 行：星期至少点亮一个`);
+  });
+  if (bad.length) return showMsg('planMsg', '无法保存：' + bad.join('；'), false);
+
+  const btn = $('saveAll');
+  btn.disabled = true;
+  let saved = 0;
+  const errors = [];
+
+  for (const row of targets) {
+    const payload = {
+      time: row.time,
+      name: row.name,
+      dose: row.dose,
+      method: row.method,
+      note: row.note,
+      weekdays: row.weekdays,
+      push_on: row.push_on ? 1 : 0,
+      enabled: row.enabled ? 1 : 0
+    };
+    try {
+      if (row.id) {
+        await api('/api/plans/' + row.id, { method: 'PUT', body: JSON.stringify(payload) });
+      } else {
+        await api('/api/plans', { method: 'POST', body: JSON.stringify(payload) });
+      }
+      saved++;
+    } catch (e) {
+      errors.push(`${row.time || '新行'} ${row.name || ''}：${e.message}`);
     }
-    await loadPlans();
-  } catch (e) {
-    showMsg('planMsg', e.message, false);
+  }
+
+  btn.disabled = false;
+  await loadPlans();
+
+  if (errors.length) {
+    showMsg('planMsg', `已保存 ${saved} 行，${errors.length} 行失败——${errors.join('；')}`, false);
+  } else {
+    showMsg('planMsg', `已保存 ${saved} 行`, true);
   }
 }
 
@@ -473,6 +515,7 @@ $('addRow').addEventListener('click', () => {
 });
 
 $('refreshPlans').addEventListener('click', loadPlans);
+$('saveAll').addEventListener('click', saveAllPlans);
 
 /* ---------- 推送设置 ---------- */
 
@@ -483,6 +526,7 @@ async function loadSettings() {
     $('push_enabled').checked = s.push_enabled === '1';
     $('push_channel').value = s.push_channel || 'wecom';
     $('serverchan_key').value = s.serverchan_key || '';
+    $('pushplus_token').value = s.pushplus_token || '';
     $('wecom_webhook').value = s.wecom_webhook || '';
     $('wecom_mention_all').checked = s.wecom_mention_all === '1';
     $('custom_webhook').value = s.custom_webhook || '';
@@ -503,6 +547,7 @@ $('saveSettings').addEventListener('click', async () => {
     push_enabled: $('push_enabled').checked ? '1' : '0',
     push_channel: $('push_channel').value,
     serverchan_key: $('serverchan_key').value.trim(),
+    pushplus_token: $('pushplus_token').value.trim(),
     wecom_webhook: $('wecom_webhook').value.trim(),
     wecom_mention_all: $('wecom_mention_all').checked ? '1' : '0',
     custom_webhook: $('custom_webhook').value.trim(),

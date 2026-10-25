@@ -142,7 +142,7 @@ function adminToken() {
 
 /* 凭据类设置只在写接口接收，读接口一律返回掩码，避免明文回显到浏览器 */
 const MASK = '••••••••';
-const SECRET_KEYS = ['serverchan_key', 'admin_token'];
+const SECRET_KEYS = ['serverchan_key', 'pushplus_token', 'admin_token'];
 
 function maskSecrets(s) {
   const out = { ...s };
@@ -292,6 +292,7 @@ async function handleApi(req, res, url) {
       'push_enabled',
       'push_channel',
       'serverchan_key',
+      'pushplus_token',
       'wecom_webhook',
       'wecom_mention_all',
       'custom_webhook',

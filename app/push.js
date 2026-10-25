@@ -1,6 +1,7 @@
 import { getSettings } from './db.js';
 
 const TIMEOUT_MS = 10000;
+const PUSHPLUS_API = process.env.PUSHPLUS_API || 'https://www.pushplus.plus/send';
 
 async function postForm(url, fields) {
   const body = new URLSearchParams(fields).toString();
@@ -54,7 +55,7 @@ function buildMessage(plan, s, opts) {
         }
       : {
           title: `${title}：该打卡了`,
-          content: `时间 ${plan.time} 有一项待完成。打开打卡页查看详情。`
+          content: `时间 ${plan.time} 有一项待完成。`
         };
   }
 
@@ -93,7 +94,7 @@ function buildSummary(sum, s) {
   if (s.privacy_mode === '1') {
     return {
       title: `${title}：今天还有 ${left.length} 项没打卡`,
-      content: `${head}。\n打开打卡页查看详情。`
+      content: `${head}。`
     };
   }
 
@@ -109,13 +110,27 @@ function buildSummary(sum, s) {
   };
 }
 
-/** Server 酱支持多个 SendKey（各自绑定一个人的微信），用逗号/空格/换行分隔 */
+/** 多凭据拆分：Server 酱的 SendKey、PushPlus 的 token 都用它，逗号/空格/分号分隔 */
 function splitKeys(raw) {
   return String(raw || '')
     .split(/[\s,;，；|]+/)
     .map((k) => k.trim())
     .filter(Boolean)
     .slice(0, 10);
+}
+
+/** 多凭据渠道的成败汇总：单个直报错误码，多个报「2/2 个 Token 成功」 */
+function summarize(label, results) {
+  const failed = results.filter((x) => !x.ok);
+  if (results.length > 1) {
+    return {
+      ok: failed.length === 0,
+      detail: `${results.length - failed.length}/${results.length} 个 ${label} 成功${
+        failed.length ? '；失败：' + failed.map((f) => f.text).join(',') : ''
+      }`
+    };
+  }
+  return { ok: !failed.length, detail: results[0] ? results[0].text : '' };
 }
 
 /** 按渠道把消息真正发出去，提醒与总结共用 */
@@ -137,12 +152,25 @@ async function dispatch(msg, s, meta = {}) {
         const oneOk = r.status === 200 && (!r.json || r.json.code === 0);
         results.push({ ok: oneOk, text: r.json ? `code=${r.json.code}` : `HTTP ${r.status}` });
       }
-      const failed = results.filter((x) => !x.ok);
-      ok = failed.length === 0;
-      detail =
-        keys.length > 1
-          ? `${keys.length - failed.length}/${keys.length} 个 SendKey 成功${failed.length ? '；失败：' + failed.map((f) => f.text).join(',') : ''}`
-          : results[0] && results[0].text;
+      ({ ok, detail } = summarize('SendKey', results));
+    } else if (channel === 'pushplus') {
+      const tokens = splitKeys(s.pushplus_token);
+      if (!tokens.length) throw new Error('未配置 PushPlus Token');
+      const results = [];
+      for (const tk of tokens) {
+        const r = await postJson(PUSHPLUS_API, {
+          token: tk,
+          title: msg.title,
+          content: msg.content,
+          template: 'txt'
+        });
+        const code = r.json ? r.json.code : null;
+        results.push({
+          ok: r.status === 200 && code === 200,
+          text: code === 905 ? '未实名认证(905)' : r.json ? `code=${code}` : `HTTP ${r.status}`
+        });
+      }
+      ({ ok, detail } = summarize('Token', results));
     } else if (channel === 'wecom') {
       const hook = (s.wecom_webhook || '').trim();
       if (!hook) throw new Error('未配置企业微信 Webhook');
