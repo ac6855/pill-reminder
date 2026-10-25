@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import {
   listPlans,
   createPlan,
+  importPlans,
   updatePlan,
   deletePlan,
   setPlanEnabled,
@@ -204,6 +205,16 @@ async function handleApi(req, res, url) {
     const body = await readBody(req);
     try {
       return json(res, 200, { ok: true, item: createPlan(body) });
+    } catch (e) {
+      return json(res, 400, { error: e.message });
+    }
+  }
+
+  if (url.pathname === '/api/plans/import' && method === 'POST') {
+    const body = await readBody(req);
+    try {
+      const mode = body.mode === 'replace' ? 'replace' : 'append';
+      return json(res, 200, { ok: true, ...importPlans(body.items, mode) });
     } catch (e) {
       return json(res, 400, { error: e.message });
     }

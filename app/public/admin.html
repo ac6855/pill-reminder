@@ -151,6 +151,24 @@
         <button class="btn btn-danger" id="wipeAll">清空全部数据</button>
       </div>
       <div class="result" id="dataMsg"></div>
+
+      <hr class="sep" />
+      <h3 class="sub-h">导入用药计划</h3>
+      <p class="hint">
+        每行一条，列顺序 <code>时间, 药品/项目, 剂量, 方式, 备注, 启用</code>，后四列可留空。
+        支持从 Excel 直接复制（制表符分隔），也可导入本页导出的 <code>plans.csv</code>。
+        首行表头会自动跳过，重复的「时间+药品」不会重复导入。
+      </p>
+      <textarea id="importText" rows="7" spellcheck="false" placeholder="07:00,示例药品 A,1 片,口服,早餐前
+08:00,示例药品 B,半片,口服,
+12:30,示例测量项,,测血糖,"></textarea>
+      <div class="import-bar">
+        <label class="file-pick">选择 CSV 文件<input type="file" id="importFile" accept=".csv,.txt,text/csv,text/plain" /></label>
+        <label class="radio"><input type="radio" name="importMode" value="append" checked /> 追加</label>
+        <label class="radio"><input type="radio" name="importMode" value="replace" /> 替换全部</label>
+        <button class="btn btn-primary" id="doImport">开始导入</button>
+      </div>
+      <div class="result" id="importMsg"></div>
     </div>
   </div>
 </div>
@@ -483,6 +501,132 @@ $('exportCheckins').addEventListener('click', async () => {
     showMsg('dataMsg', `已导出 checkins.csv（${data.items.length} 条）`, true);
   } catch (e) {
     showMsg('dataMsg', e.message, false);
+  }
+});
+
+/* ---------- 计划导入 ---------- */
+
+function parseDelimited(text) {
+  const src = String(text || '').replace(/^\uFEFF/, '');
+  const delim = (src.split('\n')[0] || '').includes('\t') ? '\t' : ',';
+  const rows = [];
+  let row = [];
+  let cell = '';
+  let q = false;
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i];
+    if (q) {
+      if (c === '"') {
+        if (src[i + 1] === '"') { cell += '"'; i++; } else q = false;
+      } else cell += c;
+      continue;
+    }
+    if (c === '"' && cell === '') { q = true; continue; }
+    if (c === delim) { row.push(cell); cell = ''; continue; }
+    if (c === '\r') continue;
+    if (c === '\n') { row.push(cell); rows.push(row); row = []; cell = ''; continue; }
+    cell += c;
+  }
+  row.push(cell);
+  rows.push(row);
+  return rows.map((r) => r.map((s) => s.trim())).filter((r) => r.some((s) => s !== ''));
+}
+
+function normTime(raw) {
+  let t = String(raw || '')
+    .trim()
+    .replace(/[：:]/g, ':')
+    .replace(/[点时時]/g, ':')
+    .replace(/分$/, '')
+    .replace(/\s+/g, '');
+  if (/^\d{1,2}:$/.test(t)) t += '00';
+  if (/^\d{1,2}$/.test(t)) t += ':00';
+  if (/^\d{3,4}$/.test(t)) t = t.slice(0, -2) + ':' + t.slice(-2);
+  const m = t.match(/^(\d{1,2}):(\d{1,2})$/);
+  if (!m) return t;
+  return String(m[1]).padStart(2, '0') + ':' + String(m[2]).padStart(2, '0');
+}
+
+function normEnabled(v) {
+  const s = String(v || '').trim().toLowerCase();
+  if (!s) return 1;
+  return ['否', '0', 'n', 'no', 'false', '停用', '禁用'].includes(s) ? 0 : 1;
+}
+
+function rowsFromText(text) {
+  const table = parseDelimited(text);
+  let start = 0;
+  if (table.length && /^(时间|time)$/i.test(table[0][0] || '')) start = 1;
+  const items = [];
+  for (let i = start; i < table.length; i++) {
+    const c = table[i];
+    items.push({
+      __line: i + 1,
+      time: normTime(c[0]),
+      name: c[1] || '',
+      dose: c[2] || '',
+      method: c[3] || '',
+      note: c[4] || '',
+      enabled: normEnabled(c[5])
+    });
+  }
+  return items;
+}
+
+$('importFile').addEventListener('change', async (ev) => {
+  const input = ev.target;
+  const f = input.files && input.files[0];
+  input.value = '';
+  if (!f) return;
+  if (f.size > 60 * 1024) {
+    showMsg('importMsg', `文件 ${Math.round(f.size / 1024)} KB，超过 60 KB 上限，请分次导入`, false);
+    return;
+  }
+  $('importText').value = await f.text();
+  showMsg('importMsg', `已读入 ${f.name}，核对内容无误后点「开始导入」`, true);
+});
+
+$('doImport').addEventListener('click', () => {
+  const text = $('importText').value;
+  if (!text.trim()) return showMsg('importMsg', '请先粘贴内容或选择 CSV 文件', false);
+  if (text.length > 60000) return showMsg('importMsg', '内容过长（上限约 60 KB），请分次导入', false);
+  const items = rowsFromText(text);
+  if (!items.length) return showMsg('importMsg', '没有解析到有效行', false);
+  if (items.length > 200) {
+    return showMsg('importMsg', `解析到 ${items.length} 行，超过单次上限 200 行，请分次导入`, false);
+  }
+
+  const mode = document.querySelector('input[name="importMode"]:checked').value;
+  const run = async () => {
+    try {
+      const r = await api('/api/plans/import', {
+        method: 'POST',
+        body: JSON.stringify({ mode, items })
+      });
+      let msg = `导入完成：新增 ${r.imported} 条`;
+      if (r.skipped) msg += `，跳过重复 ${r.skipped} 条`;
+      if (r.errors.length) {
+        const d = r.errors.slice(0, 3).map((e) => `第 ${e.line} 行 ${e.message}`).join('；');
+        msg += `，失败 ${r.errors.length} 条（${d}${r.errors.length > 3 ? ' 等' : ''}）`;
+      }
+      showMsg('importMsg', msg, !r.errors.length);
+      if (r.imported) {
+        $('importText').value = '';
+        await loadPlans();
+      }
+    } catch (e) {
+      showMsg('importMsg', e.message, false);
+    }
+  };
+
+  if (mode === 'replace') {
+    confirmDialog(
+      '替换全部计划？',
+      `会先删除现有全部用药计划与打卡记录，再写入这 ${items.length} 行。此操作不可撤销。`,
+      run
+    );
+  } else {
+    run();
   }
 });
 

@@ -131,6 +131,50 @@ export function deletePlan(id) {
   db.prepare('DELETE FROM checkins WHERE plan_id = ?').run(Number(id));
 }
 
+export function importPlans(items, mode = 'append') {
+  const list = Array.isArray(items) ? items : [];
+  if (!list.length) throw new Error('没有可导入的行');
+  if (list.length > 200) throw new Error('单次最多导入 200 行');
+
+  const out = { imported: 0, skipped: 0, errors: [] };
+  const dup = db.prepare('SELECT id FROM plans WHERE time = ? AND name = ?');
+  const ins = db.prepare(
+    'INSERT INTO plans (time, name, dose, method, note, enabled) VALUES (?, ?, ?, ?, ?, ?)'
+  );
+
+  db.exec('BEGIN');
+  try {
+    if (mode === 'replace') {
+      db.exec('DELETE FROM checkins');
+      db.exec('DELETE FROM plans');
+    }
+    list.forEach((row, i) => {
+      let p;
+      try {
+        p = normalizePlan(row || {});
+      } catch (e) {
+        out.errors.push({ line: Number(row && row.__line) || i + 1, message: e.message });
+        return;
+      }
+      if (dup.get(p.time, p.name)) {
+        out.skipped++;
+        return;
+      }
+      ins.run(p.time, p.name, p.dose, p.method, p.note, p.enabled);
+      out.imported++;
+    });
+    db.exec('COMMIT');
+  } catch (e) {
+    try {
+      db.exec('ROLLBACK');
+    } catch {
+      /* 事务可能已自动结束，忽略回滚失败 */
+    }
+    throw e;
+  }
+  return out;
+}
+
 export function listCheckins(date) {
   return db.prepare('SELECT plan_id, done_at FROM checkins WHERE date = ?').all(date);
 }

@@ -228,3 +228,23 @@ input[type="time"] { min-width: 96px; }
 .modal h3 { margin: 0 0 8px; font-size: 15px; }
 .modal p { font-size: 13px; color: var(--muted); margin: 0 0 16px; }
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+/* ---------- 计划导入 ---------- */
+.sep { border: 0; border-top: 1px solid var(--border); margin: 22px 0 16px; }
+.sub-h { font-size: 14px; font-weight: 600; margin: 0 0 10px; }
+#importText {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px; line-height: 1.7; min-height: 118px; resize: vertical;
+}
+.import-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+.import-bar .radio {
+  font-size: 13px; color: var(--muted);
+  display: inline-flex; align-items: center; gap: 5px; cursor: pointer;
+}
+.file-pick {
+  font-size: 13px; color: var(--accent); cursor: pointer;
+  border: 1px dashed var(--border); background: #fcfcfa;
+  padding: 6px 11px; border-radius: 8px;
+}
+.file-pick:hover { border-color: var(--accent); background: var(--accent-soft); }
+.file-pick input { display: none; }
