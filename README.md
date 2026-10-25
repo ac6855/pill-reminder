@@ -44,26 +44,23 @@ ghcr.io/ac6855/pill-reminder:latest
 
 `NAS_IP` 换成 NAS 在局域网中的地址，例如 `192.168.1.20`。
 
-数据落在 compose 同目录的 `./data/app.db`，已被 `.dockerignore` 排除，不进镜像。
+数据落在 `/vol2/1000/Data/pill-reminder/data/app.db`（换机器就改 compose 里那一处路径）。
 
 两点注意：
 
 1. GHCR 在国内经常拉不动，**这是常态不是配置错**。拉不动就把 compose 里的 `image:` 换成
    `pill-reminder:latest`、加一行 `build: .`，再 `docker compose up -d --build`，
    本地构建几秒完成，运行效果完全一致。
-2. 首次推送后要到 GitHub → Your packages → `pill-reminder` → `Package settings`
-   把可见性改为 Public，否则 NAS 拉取需要登录。
+2. 镜像包当前是 Public，NAS 免登录可拉；若以后改成私有，需在 NAS 上配 GHCR 登录。
 
 ### 方式二：WatchCow 应用化（可选）
 
 装了 WatchCow（`github.com/tf4fun/watchcow`）的飞牛，用 `docker-compose.watchcow.yml`，
-容器会以「用药提醒」的名字注册成 FnOS 桌面应用，不必记端口、不必进容器列表找。
+容器会以「用药提醒」的名字注册成 FnOS 桌面应用。
 
-- 标签名对版本敏感：v0.2 起 `title/description/port/appName` 改名为
-  `display_name/desc/service_port/appname`，文件里用的是新名字（已注释旧名对照）
-- 图标用的是仓库自带的 `icons/pill-reminder.png`（dashboard-icons 里没有医药类图标，
-  `pill`/`pharmacy`/`medication` 均为 404），想换本地图标见文件内注释
-- 相对路径 `file://./icons/...` 的基准是 compose 文件所在目录，图标要先传到 NAS
+- 标签名对应 **WatchCow v0.2+**（`display_name` / `desc` / `service_port` / `appname`）
+- 图标走本地文件 `file:///vol2/1000/Data/icons/pill-reminder.png`，需先把仓库里的
+  `icons/pill-reminder.png` 传到该位置
 
 ### 方式三：本地直接跑（适合开发调试）
 

@@ -1,16 +1,4 @@
-# 标准 docker-compose（飞牛 FnOS / 裸 docker compose 通用）
-# 镜像来源：GitHub Actions 自动构建并推送到 GHCR，无需本地 build
-#   镜像地址：ghcr.io/ac6855/pill-reminder:latest
-# 部署：在 docker-compose.yml 所在目录执行 `docker compose up -d`
-#   compose 自动从 GHCR 拉取；更新镜像用 `docker compose pull && docker compose up -d`
-#
-# pull_policy 用 missing 而不是 always：断网重启时若强制拉取，容器会起不来，
-# 而这是个每天推 13 次的提醒服务，宁可用旧镜像也要让它活着。
-#
-# GHCR 在国内经常拉不动（不是配置错）。拉不动就把本文件第 10 行换成：
-#   image: pill-reminder:latest
-#   build: .
-# 然后 `docker compose up -d --build`，本地构建几秒完成，运行效果一致。
+# 飞牛 FnOS 标准版｜更新：docker compose pull && docker compose up -d
 services:
   pill-reminder:
     image: ghcr.io/ac6855/pill-reminder:latest
@@ -21,11 +9,8 @@ services:
     environment:
       - TZ=Asia/Shanghai
       - PORT=8787
-      # 补推窗口（分钟）：服务若在该窗口内重启，仍会补发漏掉的提醒
       - GRACE_MINUTES=5
       - DB_PATH=/app/data/app.db
-    # 唯一的持久化数据：计划、打卡记录、推送凭据、推送日志都在这个文件里
-    # 备份 = 复制 ./data/app.db；迁移 = 连同该文件一起搬走
     volumes:
-      - ./data:/app/data
+      - /vol2/1000/Data/pill-reminder/data:/app/data
     restart: unless-stopped
