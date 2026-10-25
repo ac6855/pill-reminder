@@ -22,18 +22,45 @@
 
 ## 快速开始
 
-### 方式一：Docker（推荐，适合常开设备如 NAS / 小主机）
+### 方式一：Docker 本地构建（推荐）
 
 ```bash
-# 在项目目录下
+cd pill-reminder
 docker compose up -d --build
 ```
 
-打开 `http://<设备IP>:8787/` 即为打卡页，`http://<设备IP>:8787/admin.html` 为配置页。
+打开 `http://NAS_IP:8787/` 即为打卡页，`http://NAS_IP:8787/admin.html` 为配置页。
+`NAS_IP` 换成设备在局域网中的地址，例如 `192.168.1.20`。
 
 数据落在同目录的 `./data/app.db`（已被 `.dockerignore` 排除，不进镜像）。
 
-### 方式二：本地直接跑（适合开发调试）
+首次构建需拉取 `node:22-alpine` 基础镜像，国内网络慢的话先给 Docker 配镜像加速。
+
+### 方式二：用预构建镜像（GHCR，不在设备上构建）
+
+推送到 GitHub 后，`.github/workflows/docker.yml` 会自动构建
+`linux/amd64` + `linux/arm64` 双架构镜像并推送到 GHCR，地址为：
+
+```
+ghcr.io/OWNER/pill-reminder:latest
+```
+
+使用方式：
+
+```bash
+cd pill-reminder
+echo "PILL_IMAGE=ghcr.io/OWNER/pill-reminder:latest" > .env
+docker compose pull
+docker compose up -d
+```
+
+两点注意：
+
+1. GHCR 在国内经常拉不动。**拉取失败就直接用方式一本地构建**，运行效果完全一致。
+2. 若 GitHub 上的 package 默认显示为私有，到仓库页右侧 `Packages` → 该镜像 →
+   `Package settings` 把可见性改为 Public，设备才能免登录拉取。
+
+### 方式三：本地直接跑（适合开发调试）
 
 要求 Node.js **>= 22.5**（`node:sqlite` 自该版本起内置）。
 
@@ -125,3 +152,17 @@ Server 酱当日配额用尽、设备所在网络访问不了 `sctapi.ftqq.com`�
 **忘记管理口令**
 停服务后删掉 `data/app.db` 里的设置表即可（会一并丢掉其他配置）：
 `sqlite3 data/app.db "DELETE FROM settings WHERE k='admin_token';"`，或直接清空数据重录。
+
+**镜像拉下来跑不起来，报 `exec format error`**
+架构不匹配。在 arm64 机器（如 Apple Silicon Mac）上构建的单架构镜像，无法在 x86_64 设备上运行。
+本项目的 CI 已构建 `linux/amd64` + `linux/arm64` 双架构；若自己手动构建，请用：
+
+```bash
+docker buildx build --platform linux/amd64,linux/arm64 -t pill-reminder:latest .
+```
+
+或者直接在目标设备上用 `docker compose up -d --build` 本地构建，天然匹配本机架构。
+
+**GHCR 拉取超时**
+国内访问 `ghcr.io` 不稳定属于常态，不是仓库问题。改用方式一本地构建即可；
+也可以把镜像同步到阿里云 ACR 等国内仓库再拉。
