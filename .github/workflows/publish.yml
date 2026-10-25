@@ -1,0 +1,83 @@
+# 构建并推送用药提醒镜像到 GHCR（GitHub Container Registry）
+# 触发：push 到 main 分支 / 打 v* tag / 手动 workflow_dispatch
+# 凭据：使用 Actions 自带的 GITHUB_TOKEN，无需任何额外配置
+# 架构：同时构建 linux/amd64（飞牛 NAS）与 linux/arm64（Mac / 树莓派等）
+# 镜像地址：ghcr.io/ac6855/pill-reminder:latest
+#
+# 首次推送后务必把 Package 设为公开，否则 NAS 拉取需登录：
+#   GitHub → 右上角头像 → Your packages → pill-reminder
+#   → Package settings → Change visibility → Public
+# （若仓库私有、又不想公开镜像，则在 NAS 上配置 ghcr.io 的 read:packages 令牌）
+
+name: Publish image to GHCR
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write # 推送 GHCR 必需
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/pill-reminder
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 先做语法自检再构建镜像：不过就别推新镜像，
+      # 免得把坏版本推到 NAS 上（compose 设的是 pull_policy: always）
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 语法自检
+        run: |
+          node --version
+          for f in app/server.js app/db.js app/push.js; do
+            node --check "$f"
+          done
+          echo "语法检查通过"
+
+      - name: Set up QEMU（多架构模拟）
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 生成镜像标签
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=sha-,format=short
+          labels: |
+            org.opencontainers.image.title=pill-reminder
+            org.opencontainers.image.description=用药提醒（定时微信推送 + 打卡页 + 表格配置，SQLite 存储）
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

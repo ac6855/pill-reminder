@@ -22,43 +22,48 @@
 
 ## 快速开始
 
-### 方式一：Docker 本地构建（推荐）
+### 方式一：飞牛 FnOS / NAS 部署（推荐）
 
-```bash
-cd pill-reminder
-docker compose up -d --build
-```
+仓库带两份 compose，按有没有装 WatchCow 二选一：
 
-打开 `http://NAS_IP:8787/` 即为打卡页，`http://NAS_IP:8787/admin.html` 为配置页。
-`NAS_IP` 换成设备在局域网中的地址，例如 `192.168.1.20`。
+| 文件 | 用途 |
+|---|---|
+| `docker-compose.yml` | 标准版。飞牛 Docker「新建项目」直接粘贴，或在目录里 `docker compose up -d` |
+| `docker-compose.watchcow.yml` | 装了 WatchCow 的飞牛用它，容器会注册成桌面应用，点开即用 |
 
-数据落在同目录的 `./data/app.db`（已被 `.dockerignore` 排除，不进镜像）。
-
-首次构建需拉取 `node:22-alpine` 基础镜像，国内网络慢的话先给 Docker 配镜像加速。
-
-### 方式二：用预构建镜像（GHCR，不在设备上构建）
-
-推送到 GitHub 后，`.github/workflows/docker.yml` 会自动构建
-`linux/amd64` + `linux/arm64` 双架构镜像并推送到 GHCR，地址为：
+镜像由 GitHub Actions 构建并推送到 GHCR，设备上不需要 build：
 
 ```
-ghcr.io/OWNER/pill-reminder:latest
+ghcr.io/ac6855/pill-reminder:latest
 ```
 
-使用方式：
+部署完打开：
 
-```bash
-cd pill-reminder
-echo "PILL_IMAGE=ghcr.io/OWNER/pill-reminder:latest" > .env
-docker compose pull
-docker compose up -d
-```
+- 打卡页 `http://NAS_IP:8787/`
+- 配置页 `http://NAS_IP:8787/admin.html`
+
+`NAS_IP` 换成 NAS 在局域网中的地址，例如 `192.168.1.20`。
+
+数据落在 compose 同目录的 `./data/app.db`，已被 `.dockerignore` 排除，不进镜像。
 
 两点注意：
 
-1. GHCR 在国内经常拉不动。**拉取失败就直接用方式一本地构建**，运行效果完全一致。
-2. 若 GitHub 上的 package 默认显示为私有，到仓库页右侧 `Packages` → 该镜像 →
-   `Package settings` 把可见性改为 Public，设备才能免登录拉取。
+1. GHCR 在国内经常拉不动，**这是常态不是配置错**。拉不动就把 compose 里的 `image:` 换成
+   `pill-reminder:latest`、加一行 `build: .`，再 `docker compose up -d --build`，
+   本地构建几秒完成，运行效果完全一致。
+2. 首次推送后要到 GitHub → Your packages → `pill-reminder` → `Package settings`
+   把可见性改为 Public，否则 NAS 拉取需要登录。
+
+### 方式二：WatchCow 应用化（可选）
+
+装了 WatchCow（`github.com/tf4fun/watchcow`）的飞牛，用 `docker-compose.watchcow.yml`，
+容器会以「用药提醒」的名字注册成 FnOS 桌面应用，不必记端口、不必进容器列表找。
+
+- 标签名对版本敏感：v0.2 起 `title/description/port/appName` 改名为
+  `display_name/desc/service_port/appname`，文件里用的是新名字（已注释旧名对照）
+- 图标用的是仓库自带的 `icons/pill-reminder.png`（dashboard-icons 里没有医药类图标，
+  `pill`/`pharmacy`/`medication` 均为 404），想换本地图标见文件内注释
+- 相对路径 `file://./icons/...` 的基准是 compose 文件所在目录，图标要先传到 NAS
 
 ### 方式三：本地直接跑（适合开发调试）
 
@@ -78,6 +83,18 @@ PORT=8787 TZ=Asia/Shanghai node app/server.js
 | `TZ` | `Asia/Shanghai` | 推送判定所用时区 |
 | `DB_PATH` | `./data/app.db` | SQLite 文件路径 |
 | `GRACE_MINUTES` | `5` | 补推窗口（分钟）。服务在该窗口内重启，仍会补发未成功的提醒 |
+
+## 手机上怎么用
+
+打卡页是移动端优先的，手机浏览器直接开 `http://NAS_IP:8787/`。
+
+- **微信里能打开**：把地址发到「文件传输助手」，点链接；若弹「非微信官方网页」选继续访问。
+  微信内置浏览器不存书签，长期用建议走下一条。
+- **添加到主屏幕（推荐）**：iPhone 用 Safari → 分享 → 添加到主屏幕；安卓用 Chrome → ⋮ → 添加到主屏幕。
+  桌面多一个图标，家人不用教也会点。
+- **前提**：在路由器里给 NAS 做 DHCP 地址保留（MAC 绑定），否则路由器重启后 IP 变了，链接就失效。
+- **异地访问**：内网地址在外网一定打不开，需要内网穿透（如 Tailscale）或飞牛自带远程访问。
+  任何映射到公网的做法，**务必先在配置页设管理口令**，否则管理接口对全网敞开。
 
 ## 首次配置
 
@@ -132,6 +149,12 @@ PORT=8787 TZ=Asia/Shanghai node app/server.js
 鉴权方式：请求头 `x-admin-token: <口令>` 或查询参数 `?token=<口令>`。未设置口令时一律放行。
 
 ## 常见问题
+
+**怎么更新到新版本**
+
+`docker compose pull && docker compose up -d`，数据在 `./data` 不受影响。
+compose 里刻意没设 `pull_policy: always`：那样断网重启会拉取失败、容器直接起不来，
+而这是个每天推 13 次的提醒服务，宁可用旧镜像也要让它活着。
 
 **收不到推送**
 先点「发送测试推送」看返回详情，再查「推送日志」。常见原因：SendKey 填错、渠道选错、
