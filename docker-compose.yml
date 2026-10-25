@@ -1,0 +1,16 @@
+services:
+  pill-reminder:
+    build: .
+    image: pill-reminder:latest
+    container_name: pill-reminder
+    restart: unless-stopped
+    ports:
+      - "8787:8787"
+    environment:
+      TZ: Asia/Shanghai
+      PORT: "8787"
+      # 允许补推的时间窗口（分钟）：服务若在该窗口内重启，仍会补发提醒
+      GRACE_MINUTES: "5"
+      DB_PATH: /app/data/app.db
+    volumes:
+      - ./data:/app/data

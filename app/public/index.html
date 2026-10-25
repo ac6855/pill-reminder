@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="robots" content="noindex, nofollow" />
+<title>用药打卡</title>
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div>
+      <div class="brand" id="siteTitle">用药提醒</div>
+      <span class="brand-sub" id="dateSub">今日打卡</span>
+    </div>
+    <div class="date-nav">
+      <button id="prevDay" aria-label="前一天">‹</button>
+      <div class="cur" id="dateCur">—</div>
+      <button id="nextDay" aria-label="后一天">›</button>
+    </div>
+  </div>
+
+  <div class="progress-card">
+    <div class="progress-line">
+      <div class="num"><span id="doneCount">0</span><small> / <span id="totalCount">0</span> 项已完成</small></div>
+      <div class="desc" id="progressDesc"></div>
+    </div>
+    <div class="bar"><i id="progressBar"></i></div>
+  </div>
+
+  <div class="list" id="list"></div>
+
+  <div class="footer">
+    数据仅保存在本机 SQLite · <a href="/admin.html">进入配置</a>
+  </div>
+</div>
+
+<script>
+const state = { date: null, items: [], isToday: true, now: '' };
+
+const el = (id) => document.getElementById(id);
+
+function fmtDate(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function shiftDate(str, delta) {
+  const [y, m, d] = str.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + delta);
+  return fmtDate(dt);
+}
+
+function toMinutes(hm) {
+  const [h, m] = hm.split(':').map(Number);
+  return h * 60 + m;
+}
+
+function renderDateLabel() {
+  const today = fmtDate(new Date());
+  el('dateCur').textContent = state.date === today ? '今天' : state.date.slice(5).replace('-', '/');
+  el('dateSub').textContent = state.isToday ? '今日打卡' : '历史记录';
+}
+
+function render() {
+  const list = el('list');
+  list.innerHTML = '';
+
+  if (!state.items.length) {
+    list.innerHTML = '<div class="empty">还没有配置用药计划<br><a href="/admin.html">去配置页添加</a></div>';
+    el('doneCount').textContent = '0';
+    el('totalCount').textContent = '0';
+    el('progressBar').style.width = '0%';
+    el('progressDesc').textContent = '';
+    return;
+  }
+
+  const nowMin = toMinutes(state.now || '00:00');
+
+  for (const it of state.items) {
+    const late = it.enabled && state.isToday && !it.done && nowMin > toMinutes(it.time);
+    const div = document.createElement('div');
+    div.className = 'item' + (it.done ? ' done' : '') + (late ? ' late' : '') + (it.enabled ? '' : ' disabled');
+
+    const metaBits = [];
+    if (it.dose) metaBits.push(it.dose);
+    if (it.method) metaBits.push(it.method);
+    if (!it.enabled) metaBits.push('已停用');
+
+    let tag = '';
+    if (it.done) tag = '<span class="tag-done">已完成</span>';
+    else if (late) tag = '<span class="tag-late">已超时</span>';
+
+    div.innerHTML = `
+      <div class="time">${it.time}</div>
+      <div class="body">
+        <div class="name">${escapeHtml(it.name)}${tag}</div>
+        ${metaBits.length ? `<div class="meta">${escapeHtml(metaBits.join(' · '))}</div>` : ''}
+        ${it.note ? `<div class="note">${escapeHtml(it.note)}</div>` : ''}
+      </div>
+      <div class="check">
+        <svg viewBox="0 0 16 16" fill="none"><path d="M3 8.5L6.2 11.7L13 5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>`;
+
+    if (it.enabled) {
+      div.addEventListener('click', () => toggle(it));
+    } else {
+      div.style.cursor = 'default';
+    }
+    list.appendChild(div);
+  }
+
+  const active = state.items.filter((i) => i.enabled);
+  const done = active.filter((i) => i.done).length;
+  el('doneCount').textContent = String(done);
+  el('totalCount').textContent = String(active.length);
+  const pct = active.length ? Math.round((done / active.length) * 100) : 0;
+  el('progressBar').style.width = pct + '%';
+  el('progressDesc').textContent = active.length === 0
+    ? ''
+    : done === active.length
+      ? '今天全部完成'
+      : `还剩 ${active.length - done} 项`;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+async function toggle(item) {
+  const target = !item.done;
+  item.done = target;
+  render();
+  try {
+    const res = await fetch('/api/checkin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ planId: item.id, date: state.date, done: target })
+    });
+    if (!res.ok) throw new Error('保存失败');
+    const data = await res.json();
+    item.done = data.done;
+    item.done_at = data.done_at;
+  } catch (e) {
+    item.done = !target;
+    alert('打卡状态保存失败，请检查网络后重试');
+  }
+  render();
+}
+
+async function load(date) {
+  const res = await fetch('/api/day?date=' + encodeURIComponent(date));
+  if (!res.ok) {
+    el('list').innerHTML = '<div class="empty">加载失败，请刷新页面</div>';
+    return;
+  }
+  const data = await res.json();
+  state.date = data.date;
+  state.items = data.items;
+  state.isToday = data.isToday;
+  state.now = data.now;
+  el('siteTitle').textContent = data.title || '用药提醒';
+  document.title = (data.title || '用药提醒') + ' · 打卡';
+  renderDateLabel();
+  render();
+}
+
+el('prevDay').addEventListener('click', () => load(shiftDate(state.date, -1)));
+el('nextDay').addEventListener('click', () => load(shiftDate(state.date, 1)));
+
+load(fmtDate(new Date()));
+
+setInterval(async () => {
+  if (!state.isToday) return;
+  try {
+    const res = await fetch('/api/day?date=' + encodeURIComponent(state.date));
+    if (!res.ok) return;
+    const data = await res.json();
+    state.now = data.now;
+    if (JSON.stringify(data.items.map(i => [i.id, i.done])) !== JSON.stringify(state.items.map(i => [i.id, i.done]))) {
+      state.items = data.items;
+    }
+    render();
+  } catch { /* 静默 */ }
+}, 60000);
+</script>
+</body>
+</html>

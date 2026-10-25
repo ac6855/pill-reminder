@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="robots" content="noindex, nofollow" />
+<title>配置 · 用药提醒</title>
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+<div class="admin-wrap">
+  <div class="head">
+    <div>
+      <h1>用药提醒 · 配置</h1>
+      <div class="sub">计划数据存放在本机 SQLite，不写入代码仓库</div>
+    </div>
+    <div class="head-actions">
+      <input type="password" id="tokenInput" class="token-input" placeholder="管理口令（未设置可留空）" />
+      <button class="btn btn-sm" id="saveToken">记住口令</button>
+      <a class="btn btn-sm" href="/" target="_blank" rel="noopener">打开打卡页</a>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="active" data-tab="plans">用药计划</button>
+    <button data-tab="push">推送设置</button>
+    <button data-tab="logs">推送日志</button>
+    <button data-tab="data">数据管理</button>
+  </div>
+
+  <div class="panel active" id="panel-plans">
+    <div class="card">
+      <h2>用药计划表</h2>
+      <p class="hint">
+        一行对应一个时间点。时间格式 24 小时制 HH:MM；停用的行不会推送提醒，也不计入打卡总数。
+        修改后点该行的「保存」生效。
+      </p>
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" id="addRow">+ 新增一行</button>
+        <button class="btn btn-sm" id="refreshPlans">刷新</button>
+        <span style="flex:1"></span>
+        <span class="badge" id="planCount">0 行</span>
+      </div>
+      <div class="table-scroll">
+        <table class="grid">
+          <thead>
+            <tr>
+              <th style="width:100px">时间</th>
+              <th style="min-width:140px">药品 / 项目</th>
+              <th style="width:100px">剂量</th>
+              <th style="width:100px">方式</th>
+              <th style="min-width:160px">备注</th>
+              <th style="width:56px">启用</th>
+              <th style="width:120px">操作</th>
+            </tr>
+          </thead>
+          <tbody id="planBody"></tbody>
+        </table>
+      </div>
+      <div class="result" id="planMsg"></div>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-push">
+    <div class="card">
+      <h2>推送通道</h2>
+      <p class="hint">
+        选择一种通道并填写凭据。开启「隐私模式」后，推送正文只提示有待办事项，不包含药品名称。
+      </p>
+      <div class="form-row">
+        <label>总开关</label>
+        <div><label class="switch"><input type="checkbox" id="push_enabled" /> 到点自动推送</label></div>
+      </div>
+      <div class="form-row">
+        <label>推送渠道</label>
+        <div class="wide">
+          <select id="push_channel">
+            <option value="serverchan">Server 酱（微信）</option>
+            <option value="wecom">企业微信群机器人</option>
+            <option value="custom">自定义 Webhook</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <label>SendKey</label>
+        <div class="wide"><input type="password" id="serverchan_key" placeholder="SCT... 来自 sctapi.ftqq.com" /></div>
+      </div>
+      <div class="form-row">
+        <label>企业微信 Webhook</label>
+        <div class="wide"><input type="text" id="wecom_webhook" placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=..." /></div>
+      </div>
+      <div class="form-row">
+        <label>自定义 Webhook</label>
+        <div class="wide"><input type="text" id="custom_webhook" placeholder="https://example.com/hook（POST JSON）" /></div>
+      </div>
+      <div class="form-row">
+        <label>隐私模式</label>
+        <div><label class="switch"><input type="checkbox" id="privacy_mode" /> 推送正文隐藏药品名称</label></div>
+      </div>
+      <div class="form-row">
+        <label>页面标题</label>
+        <div class="wide"><input type="text" id="site_title" placeholder="用药提醒" maxlength="40" /></div>
+      </div>
+      <div class="form-row">
+        <label>管理口令</label>
+        <div class="wide"><input type="password" id="admin_token" placeholder="留空则不校验（仅限可信局域网）" /></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:16px">
+        <button class="btn btn-primary" id="saveSettings">保存设置</button>
+        <button class="btn" id="testPush">发送测试推送</button>
+      </div>
+      <div class="result" id="pushMsg"></div>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-logs">
+    <div class="card">
+      <h2>推送记录</h2>
+      <p class="hint">每次自动推送与测试推送都会留档。同一计划、同一天、同一时间最多尝试 3 次。</p>
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <button class="btn btn-sm" id="refreshLogs">刷新</button>
+      </div>
+      <div class="table-scroll">
+        <table class="grid">
+          <thead>
+            <tr>
+              <th style="width:150px">时间</th>
+              <th style="width:90px">计划</th>
+              <th style="width:110px">渠道</th>
+              <th style="width:70px">结果</th>
+              <th>详情</th>
+            </tr>
+          </thead>
+          <tbody id="logBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-data">
+    <div class="card">
+      <h2>数据管理</h2>
+      <p class="hint">
+        本项目代码中不含任何真实用药数据。此处写入的内容只存在 <code>data/app.db</code> 这个 SQLite 文件里，
+        备份或迁移时复制该文件即可。
+      </p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn" id="seedDemo">载入示例模板</button>
+        <button class="btn" id="exportPlans">导出计划 CSV</button>
+        <button class="btn" id="exportCheckins">导出打卡记录 CSV</button>
+        <button class="btn btn-danger" id="wipeAll">清空全部数据</button>
+      </div>
+      <div class="result" id="dataMsg"></div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-mask" id="modal">
+  <div class="modal">
+    <h3 id="modalTitle">确认操作</h3>
+    <p id="modalText"></p>
+    <div class="modal-actions">
+      <button class="btn" id="modalCancel">取消</button>
+      <button class="btn btn-primary" id="modalOk">确认</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let token = localStorage.getItem('pill_admin_token') || '';
+$('tokenInput').value = '';
+
+function headers(json) {
+  const h = {};
+  if (json) h['Content-Type'] = 'application/json';
+  if (token) h['x-admin-token'] = token;
+  return h;
+}
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, { ...opts, headers: { ...headers(!!opts.body), ...(opts.headers || {}) } });
+  if (res.status === 401) throw new Error('管理口令无效，请在右上角输入正确口令后点「记住口令」');
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || ('请求失败 HTTP ' + res.status));
+  return data;
+}
+
+function showMsg(id, text, ok) {
+  const el = $(id);
+  el.textContent = text;
+  el.className = 'result show ' + (ok ? 'ok' : 'err');
+}
+
+/* ---------- Tab ---------- */
+
+document.querySelectorAll('.tabs button').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tabs button').forEach((b) => b.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach((p) => p.classList.remove('active'));
+    btn.classList.add('active');
+    $('panel-' + btn.dataset.tab).classList.add('active');
+    if (btn.dataset.tab === 'logs') loadLogs();
+    if (btn.dataset.tab === 'push') loadSettings();
+  });
+});
+
+$('saveToken').addEventListener('click', () => {
+  token = $('tokenInput').value.trim();
+  localStorage.setItem('pill_admin_token', token);
+  showMsg('planMsg', token ? '口令已记住' : '口令已清空', true);
+  loadPlans();
+});
+
+/* ---------- 用药计划表 ---------- */
+
+let rows = [];
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function renderPlans() {
+  const body = $('planBody');
+  body.innerHTML = '';
+  if (!rows.length) {
+    body.innerHTML = '<tr><td colspan="7" style="color:#9aa09b;padding:24px 6px;text-align:center">还没有计划，点「+ 新增一行」开始</td></tr>';
+    $('planCount').textContent = '0 行';
+    return;
+  }
+  $('planCount').textContent = rows.length + ' 行';
+
+  rows.forEach((row, idx) => {
+    const tr = document.createElement('tr');
+    if (!row.enabled) tr.className = 'off';
+    tr.innerHTML = `
+      <td><input type="time" class="w-time" data-f="time" value="${esc(row.time)}" /></td>
+      <td><input type="text" data-f="name" value="${esc(row.name)}" placeholder="药品名称" maxlength="60" /></td>
+      <td><input type="text" data-f="dose" value="${esc(row.dose)}" placeholder="如 1 片" maxlength="40" /></td>
+      <td><input type="text" data-f="method" value="${esc(row.method)}" placeholder="口服/自测" maxlength="20" /></td>
+      <td><input type="text" data-f="note" value="${esc(row.note)}" placeholder="护理提示（可选）" maxlength="120" /></td>
+      <td style="text-align:center"><input type="checkbox" data-f="enabled" ${row.enabled ? 'checked' : ''} style="width:16px;height:16px;accent-color:#0f6e56" /></td>
+      <td>
+        <div class="row-actions">
+          <button class="btn btn-sm" data-act="save">保存</button>
+          <button class="btn btn-sm btn-danger" data-act="del">删除</button>
+        </div>
+      </td>`;
+
+    const inputs = tr.querySelectorAll('[data-f]');
+    inputs.forEach((inp) => {
+      const ev = inp.type === 'checkbox' ? 'change' : 'input';
+      inp.addEventListener(ev, async () => {
+        const f = inp.dataset.f;
+        if (f === 'enabled') {
+          row.enabled = inp.checked ? 1 : 0;
+          tr.classList.toggle('off', !row.enabled);
+          if (row.id) {
+            try {
+              await api('/api/plans/' + row.id + '/enabled', {
+                method: 'PATCH',
+                body: JSON.stringify({ enabled: !!row.enabled })
+              });
+            } catch (e) {
+              row.enabled = row.enabled ? 0 : 1;
+              inp.checked = !!row.enabled;
+              tr.classList.toggle('off', !row.enabled);
+              showMsg('planMsg', e.message, false);
+            }
+          }
+        } else {
+          row[f] = inp.value;
+        }
+      });
+    });
+
+    tr.querySelector('[data-act="save"]').addEventListener('click', () => saveRow(row, idx));
+    tr.querySelector('[data-act="del"]').addEventListener('click', () => deleteRow(row));
+    body.appendChild(tr);
+  });
+}
+
+async function loadPlans() {
+  try {
+    const data = await api('/api/plans');
+    rows = data.items.map((p) => ({ ...p, enabled: p.enabled ? 1 : 0 }));
+    renderPlans();
+  } catch (e) {
+    showMsg('planMsg', e.message, false);
+  }
+}
+
+async function saveRow(row, idx) {
+  if (!row.time) return showMsg('planMsg', '请先填写时间（HH:MM）', false);
+  if (!row.name || !row.name.trim()) return showMsg('planMsg', '请填写药品或项目名称', false);
+  const payload = {
+    time: row.time,
+    name: row.name,
+    dose: row.dose,
+    method: row.method,
+    note: row.note,
+    enabled: row.enabled ? 1 : 0
+  };
+  try {
+    if (row.id) {
+      await api('/api/plans/' + row.id, { method: 'PUT', body: JSON.stringify(payload) });
+      showMsg('planMsg', `已保存：${payload.time} ${payload.name}`, true);
+    } else {
+      const data = await api('/api/plans', { method: 'POST', body: JSON.stringify(payload) });
+      rows[idx] = { ...data.item, enabled: data.item.enabled ? 1 : 0 };
+      showMsg('planMsg', `已新增：${payload.time} ${payload.name}`, true);
+    }
+    await loadPlans();
+  } catch (e) {
+    showMsg('planMsg', e.message, false);
+  }
+}
+
+function deleteRow(row) {
+  if (!row.id) {
+    rows = rows.filter((r) => r !== row);
+    renderPlans();
+    return;
+  }
+  confirmDialog('删除该行？', `将删除「${row.time} ${row.name}」及其打卡记录，此操作不可撤销。`, async () => {
+    try {
+      await api('/api/plans/' + row.id, { method: 'DELETE' });
+      showMsg('planMsg', '已删除', true);
+      await loadPlans();
+    } catch (e) {
+      showMsg('planMsg', e.message, false);
+    }
+  });
+}
+
+$('addRow').addEventListener('click', () => {
+  rows.push({ id: null, time: '', name: '', dose: '', method: '', note: '', enabled: 1 });
+  renderPlans();
+  const body = $('planBody');
+  const last = body.lastElementChild;
+  if (last) last.querySelector('input').focus();
+});
+
+$('refreshPlans').addEventListener('click', loadPlans);
+
+/* ---------- 推送设置 ---------- */
+
+async function loadSettings() {
+  try {
+    const data = await api('/api/settings');
+    const s = data.settings;
+    $('push_enabled').checked = s.push_enabled === '1';
+    $('push_channel').value = s.push_channel || 'serverchan';
+    $('serverchan_key').value = s.serverchan_key || '';
+    $('wecom_webhook').value = s.wecom_webhook || '';
+    $('custom_webhook').value = s.custom_webhook || '';
+    $('privacy_mode').checked = s.privacy_mode === '1';
+    $('site_title').value = s.site_title || '';
+    $('admin_token').value = s.admin_token || '';
+  } catch (e) {
+    showMsg('planMsg', e.message, false);
+    showMsg('pushMsg', e.message, false);
+  }
+}
+
+$('saveSettings').addEventListener('click', async () => {
+  const payload = {
+    push_enabled: $('push_enabled').checked ? '1' : '0',
+    push_channel: $('push_channel').value,
+    serverchan_key: $('serverchan_key').value.trim(),
+    wecom_webhook: $('wecom_webhook').value.trim(),
+    custom_webhook: $('custom_webhook').value.trim(),
+    privacy_mode: $('privacy_mode').checked ? '1' : '0',
+    site_title: $('site_title').value.trim(),
+    admin_token: $('admin_token').value
+  };
+  try {
+    await api('/api/settings', { method: 'PUT', body: JSON.stringify(payload) });
+    token = payload.admin_token;
+    localStorage.setItem('pill_admin_token', token);
+    $('tokenInput').value = '';
+    showMsg('pushMsg', '设置已保存' + (payload.push_enabled === '1' ? '，自动推送已开启' : '，自动推送处于关闭状态'), true);
+    loadPlans();
+  } catch (e) {
+    showMsg('pushMsg', e.message, false);
+  }
+});
+
+$('testPush').addEventListener('click', async () => {
+  const btn = $('testPush');
+  btn.disabled = true;
+  showMsg('pushMsg', '正在发送测试推送…', true);
+  try {
+    const r = await api('/api/push/test', { method: 'POST' });
+    showMsg(
+      'pushMsg',
+      r.ok
+        ? `测试推送成功（${r.channel}）\n标题：${r.preview.title}`
+        : `测试推送失败：${r.detail}`,
+      r.ok
+    );
+  } catch (e) {
+    showMsg('pushMsg', e.message, false);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+/* ---------- 日志 ---------- */
+
+async function loadLogs() {
+  const body = $('logBody');
+  body.innerHTML = '<tr><td colspan="5" style="color:#9aa09b;padding:20px 6px">加载中…</td></tr>';
+  try {
+    const data = await api('/api/logs?limit=100');
+    if (!data.items.length) {
+      body.innerHTML = '<tr><td colspan="5" style="color:#9aa09b;padding:20px 6px">暂无记录</td></tr>';
+      return;
+    }
+    body.innerHTML = data.items
+      .map((l) => `
+        <tr>
+          <td style="font-variant-numeric:tabular-nums">${esc(l.created_at)}</td>
+          <td>${l.plan_name ? esc(l.plan_name) : '测试'}</td>
+          <td>${esc(l.channel)}</td>
+          <td><span class="badge ${l.ok ? 'ok' : 'err'}">${l.ok ? '成功' : '失败'}</span></td>
+          <td style="color:#6b716c">${esc(l.detail)}</td>
+        </tr>`)
+      .join('');
+  } catch (e) {
+    body.innerHTML = `<tr><td colspan="5" style="color:#a32d2d;padding:20px 6px">${esc(e.message)}</td></tr>`;
+  }
+}
+
+$('refreshLogs').addEventListener('click', loadLogs);
+
+/* ---------- 数据 ---------- */
+
+$('seedDemo').addEventListener('click', () => {
+  confirmDialog('载入示例模板？', '会新增 3 行通用示例数据（不含任何真实药品信息），可再逐行改成你需要的内容。', async () => {
+    try {
+      await api('/api/demo', { method: 'POST' });
+      showMsg('dataMsg', '已载入示例模板', true);
+      await loadPlans();
+    } catch (e) {
+      showMsg('dataMsg', e.message, false);
+    }
+  });
+});
+
+function download(name, text) {
+  const blob = new Blob(['\uFEFF' + text], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+function csvCell(v) {
+  const s = String(v ?? '');
+  return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
+$('exportPlans').addEventListener('click', async () => {
+  try {
+    const data = await api('/api/plans');
+    const lines = ['时间,药品/项目,剂量,方式,备注,启用'];
+    data.items.forEach((p) => lines.push([p.time, p.name, p.dose, p.method, p.note, p.enabled ? '是' : '否'].map(csvCell).join(',')));
+    download('plans.csv', lines.join('\n'));
+    showMsg('dataMsg', '已导出 plans.csv', true);
+  } catch (e) {
+    showMsg('dataMsg', e.message, false);
+  }
+});
+
+$('exportCheckins').addEventListener('click', async () => {
+  try {
+    const data = await api('/api/checkins?limit=5000');
+    const lines = ['日期,时间,药品/项目,完成时间'];
+    data.items.forEach((c) => lines.push([c.date, c.time, c.name, c.done_at].map(csvCell).join(',')));
+    download('checkins.csv', lines.join('\n'));
+    showMsg('dataMsg', `已导出 checkins.csv（${data.items.length} 条）`, true);
+  } catch (e) {
+    showMsg('dataMsg', e.message, false);
+  }
+});
+
+$('wipeAll').addEventListener('click', () => {
+  confirmDialog('清空全部数据？', '将删除所有用药计划、打卡记录与推送日志。SQLite 文件本身保留，此操作不可撤销。', async () => {
+    try {
+      await api('/api/wipe', { method: 'POST' });
+      showMsg('dataMsg', '已清空全部数据', true);
+      await loadPlans();
+    } catch (e) {
+      showMsg('dataMsg', e.message, false);
+    }
+  });
+});
+
+/* ---------- 确认弹窗 ---------- */
+
+let pendingAction = null;
+
+function confirmDialog(title, text, onOk) {
+  $('modalTitle').textContent = title;
+  $('modalText').textContent = text;
+  pendingAction = onOk;
+  $('modal').classList.add('show');
+}
+
+$('modalCancel').addEventListener('click', () => {
+  $('modal').classList.remove('show');
+  pendingAction = null;
+});
+$('modalOk').addEventListener('click', () => {
+  $('modal').classList.remove('show');
+  const fn = pendingAction;
+  pendingAction = null;
+  if (fn) fn();
+});
+
+loadPlans();
+loadSettings();
+</script>
+</body>
+</html>

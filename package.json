@@ -1,0 +1,14 @@
+{
+  "name": "pill-reminder",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "轻量用药提醒服务：SQLite 存储 + 移动端打卡页 + 微信推送，零第三方依赖",
+  "engines": {
+    "node": ">=22.5"
+  },
+  "scripts": {
+    "start": "node app/server.js",
+    "dev": "node --watch app/server.js"
+  }
+}
